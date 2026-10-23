@@ -206,9 +206,17 @@ final class BehaviorEngine {
 
     /// Chosen per pet in its menus; nil plays the pack's own double-click clip.
     var doubleClickOverride: Catalog.PoolEntry?
+    /// Each double-click plays a different surprise or travel gait.
+    var doubleClickRandom = false
+
+    /// One of the pet's surprises or travel gaits, picked at random.
+    func randomEntry() -> Catalog.PoolEntry? {
+        let catalog = rig.catalog
+        return (catalog.surprisePool + catalog.locomotion.map { Catalog.PoolEntry(clip: $0.clip, group: nil) }).randomElement()
+    }
 
     func doubleClick() {
-        if let entry = doubleClickOverride {
+        if let entry = doubleClickRandom ? randomEntry() : doubleClickOverride {
             // Played like Play Now: groups run start to end, travel gaits go for a walk.
             perform(sequence(for: entry, loops: randomLoops()), at: clock())
             return

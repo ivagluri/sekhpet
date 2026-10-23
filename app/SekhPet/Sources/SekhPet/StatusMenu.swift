@@ -215,10 +215,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     /// The default, then every animation, to pick what double-clicking this pet plays.
     private func doubleClickMenu(_ pet: PetController) -> NSMenuItem {
-        let override = pet.engine.doubleClickOverride
+        let random = pet.engine.doubleClickRandom
+        let override = random ? nil : pet.engine.doubleClickOverride
         let menu = NSMenu()
         let reset = entry("Default (\(pet.catalog.input.doubleClick ?? "none"))", "") { pet.setDoubleClick(nil) }
-        reset.state = override == nil ? .on : .off
+        reset.state = override == nil && !random ? .on : .off
         menu.addItem(reset)
         menu.addItem(.separator())
         let animations = animationMenu(pet, selected: override) { pet.setDoubleClick($0) }
@@ -226,6 +227,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             animations.removeItem(item)
             menu.addItem(item)
         }
+        menu.addItem(.separator())
+        let randomItem = entry("Random", "") { pet.setDoubleClickRandom() }
+        randomItem.state = random ? .on : .off
+        menu.addItem(randomItem)
         return submenu("Double-Click Action", menu)
     }
 

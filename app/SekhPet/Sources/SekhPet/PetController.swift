@@ -16,6 +16,7 @@ final class PetController {
         static let snapping = "snapToWindows"
         static let doubleClickClip = "doubleClickClip"
         static let doubleClickGroup = "doubleClickGroup"
+        static let doubleClickRandom = "doubleClickRandom"
     }
 
     let stage: PetStage
@@ -97,8 +98,17 @@ final class PetController {
     /// What double-clicking plays; nil restores the pack's default.
     func setDoubleClick(_ entry: Catalog.PoolEntry?) {
         engine.doubleClickOverride = entry
+        engine.doubleClickRandom = false
         defaults.set(entry?.clip, forKey: key(Key.doubleClickClip))
         defaults.set(entry?.group, forKey: key(Key.doubleClickGroup))
+        defaults.set(false, forKey: key(Key.doubleClickRandom))
+    }
+
+    /// Every double-click plays a different random animation.
+    func setDoubleClickRandom() {
+        setDoubleClick(nil)
+        engine.doubleClickRandom = true
+        defaults.set(true, forKey: key(Key.doubleClickRandom))
     }
 
     func setSnapping(_ on: Bool) {
@@ -274,8 +284,7 @@ final class PetController {
 
     /// Plays one of the pet's surprises or travel gaits, picked at random.
     func playRandom() {
-        let entries = catalog.surprisePool + catalog.locomotion.map { Catalog.PoolEntry(clip: $0.clip, group: nil) }
-        if let entry = entries.randomElement() { playNow(entry) }
+        if let entry = engine.randomEntry() { playNow(entry) }
     }
 
     func playNow(_ entry: Catalog.PoolEntry) {
@@ -440,6 +449,7 @@ final class PetController {
         if doubleClip.map({ catalog.clips[$0] != nil }) ?? doubleGroup.map({ catalog.groups[$0] != nil }) ?? false {
             engine.doubleClickOverride = Catalog.PoolEntry(clip: doubleClip, group: doubleGroup)
         }
+        engine.doubleClickRandom = defaults.bool(forKey: key(Key.doubleClickRandom))
         isPinned = string(Key.movement) == "pinned"
         applyPinned()
         let clip = string(Key.loopClip)

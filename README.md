@@ -57,7 +57,7 @@ Building one pal takes about a minute, more for large ones. Review `work/<pal>/c
 - **Pets window** (Choose Pets…): switch pets on and off, **Add Pet…** from a zip (or drop zips on the window), and **Export as Zip…** from a pet's ••• menu to move it to another Mac.
 - **Low Power** draws at 20 fps without anti-aliasing. Automatic turns it on when running on battery or in macOS Low Power Mode.
 
-The app is ad-hoc signed. On another Mac, the first launch needs right-click → Open, or System Settings → Privacy & Security.
+The app is ad-hoc signed, so on another Mac macOS blocks the first launch. Open it once, then click **Open Anyway** in System Settings → Privacy & Security and confirm. Or clear the download flag first with `xattr -dr com.apple.quarantine SekhPet.app`, which also keeps macOS from running it from a temporary copy, where Launch at Login doesn't stick.
 
 ## Docs
 

@@ -1,0 +1,9 @@
+{
+  "dotnet_sdk": "10.0.402",
+  "cue4parse_commit": "6f7b06eefa22f3cc259d03bb9901a384cb4fb538",
+  "ueformat_commit": "d858fe38b2b5b8c63ac4b7481b4386ebfabbf935",
+  "palworld_mappings_commit": "acdf1a6a6076f84fae3275e7c1cdd08188994da8",
+  "palworld_mappings_sha256": "e919d45fa8eebc38e6f864ba9594706ce84a531f6970a2b2dd8dfa453d0705d9",
+  "blender_tested": "5.2.2 LTS",
+  "tested_game_steam_build": "25246127"
+}

@@ -7,6 +7,8 @@ python3 extract_pal.py <Pal>                  # game machine -> <Pal>-extract.zi
 bash scripts/make_pet.sh <Pal>-extract.zip    # Mac -> work/<pal>/, installed pet
 ```
 
+With the game on a Linux box reachable by key-based SSH, `bash scripts/extract_remote.sh <host> <Pal>...` runs both steps (zips land in `work/zips/`). To re-run a pal already in `work/`, after editing its overrides or updating the scripts, give its name instead of a zip: `bash scripts/make_pet.sh <Pal>`.
+
 `<Pal>` is the internal name, as in the model `SK_<Pal>` (`extract_pal.py --list` prints them all). Variants that share their base pal's animations (`CatMage_Fire` uses `CatMage`'s) are recognised from the name; `--anims <Base>` overrides that.
 
 ## extract_pal.py
@@ -71,7 +73,7 @@ Also skim the output for the size line (`game … -> shown …`), `rejected` str
 - **Exclusions:** additive clips (Hit), the Carrying clip (a flop onto the side), and the rare clip whose pose alone is still 1.6× past a limit after fitting.
 - **Speed:** see problem 8 below.
 
-**Overrides:** hand fixes go in `overrides/<pal>.json`, merged over the generated config: dicts merge, lists replace, and `exclude` accumulates. `allowLarge` keeps clips the bounds check would drop. The generator won't overwrite a `clip-config.json` it didn't write, so a fully hand-made config is also possible.
+**Overrides:** hand fixes go in `overrides/<pal>.json`, merged over the generated config: dicts merge, lists replace, and `exclude` accumulates. `allowLarge` keeps clips the bounds check would drop. A fully hand-made `work/<pal>/clip-config.json` also works: the generator keeps any config it didn't write.
 
 ## Problems met, and their fixes
 

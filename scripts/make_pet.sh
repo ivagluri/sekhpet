@@ -1,6 +1,7 @@
 #!/bin/bash
 # Turn pals extracted with scripts/extract_pal.py into installed desktop pets.
 #   bash scripts/make_pet.sh KingWhale-extract.zip [more zips...]
+#   bash scripts/make_pet.sh KingWhale            re-run a pal already in work/ (e.g. after editing overrides)
 # Each pal works in work/<pal>/ and is installed into the pets folder; the running app
 # shows it in the Pets window. Steps whose output exists are skipped, so a failed run
 # resumes; delete work/<pal>/ to start a pal over. Needs: scripts/setup_tools.sh run once,
@@ -18,18 +19,26 @@ MAPPINGS=.tools/Palworld-Mappings.usmap
 [ $# -gt 0 ] || { sed -n '2,7p' "$0"; exit 2; }
 [ -x .tools/dotnet/dotnet ] && [ -f "${CONVERTER[1]}" ] || { echo "Run scripts/setup_tools.sh first." >&2; exit 1; }
 [ -x "$BLENDER" ] || { echo "Blender not found at $BLENDER; set BLENDER." >&2; exit 1; }
-python3 -c 'import PIL' 2>/dev/null || { echo "python3 needs Pillow: python3 -m pip install Pillow" >&2; exit 1; }
+# The first Python with Pillow (the contact sheets need it).
+PY=""
+for candidate in python3 python3.13 python3.12 python3.11 python3.10; do
+  command -v "$candidate" >/dev/null && "$candidate" -c 'import PIL' 2>/dev/null && { PY="$candidate"; break; }
+done
+[ -n "$PY" ] || { echo "No Python with Pillow found: python3 -m pip install Pillow" >&2; exit 1; }
 [ -x "$APP_BIN" ] || swift build -c release --package-path app/SekhPet
 
 make_one() {
   local ZIP="$1"
   local PAL ANIMS
-  read -r PAL ANIMS < <(python3 - "$ZIP" <<'EOF'
-import json, sys, zipfile
-m = json.loads(zipfile.ZipFile(sys.argv[1]).read('manifest.json'))
-print(m['pal'], m['animSet'])
-EOF
-) || { echo "$ZIP isn't an extract_pal.py zip" >&2; return 1; }
+  if [ "${ZIP%.zip}" = "$ZIP" ]; then
+    # A pal name: re-run it from its work folder.
+    local MANIFEST="work/$(echo "$ZIP" | tr '[:upper:]' '[:lower:]')/manifest.json"
+    [ -f "$MANIFEST" ] || { echo "$ZIP: no $MANIFEST; give its extract zip instead" >&2; return 1; }
+    read -r PAL ANIMS < <("$PY" -c 'import json,sys; m=json.load(open(sys.argv[1])); print(m["pal"], m["animSet"])' "$MANIFEST")
+  else
+    read -r PAL ANIMS < <("$PY" -c 'import json,sys,zipfile; m=json.loads(zipfile.ZipFile(sys.argv[1]).read("manifest.json")); print(m["pal"], m["animSet"])' "$ZIP") \
+      || { echo "$ZIP isn't an extract_pal.py zip" >&2; return 1; }
+  fi
   local LOWER BASE ARGS
   LOWER="$(echo "$PAL" | tr '[:upper:]' '[:lower:]')"
   BASE="work/$LOWER"
@@ -41,7 +50,7 @@ EOF
   if [ ! -f "$BASE/manifest.json" ]; then
     step unpack and verify
     mkdir -p "$BASE" work/tables
-    python3 - "$ZIP" "$BASE" <<'EOF' || return 1
+    "$PY" - "$ZIP" "$BASE" <<'EOF' || return 1
 import hashlib, json, sys, zipfile
 from pathlib import Path
 bundle, base = zipfile.ZipFile(sys.argv[1]), Path(sys.argv[2])
@@ -64,7 +73,7 @@ EOF
     "${CONVERTER[@]}" work/tables/tables work/tables/tables.json "$MAPPINGS" --inspect \
       Pal/Content/Pal/DataTable/Character/DT_PalMonsterParameter.uasset \
       Pal/Content/L10N/en/Pal/DataTable/Text/DT_PalNameText_Common.uasset | tail -1
-    python3 scripts/index_paldeck.py || return 1
+    "$PY" scripts/index_paldeck.py || return 1
   fi
 
   if [ ! -f "$BASE/converted/conversion-report.json" ]; then
@@ -86,7 +95,7 @@ EOF
   fi
 
   export_pack() {
-    python3 scripts/make_pal_config.py "$PAL" "${ARGS[@]:2}" || return 1
+    "$PY" scripts/make_pal_config.py "$PAL" "${ARGS[@]:2}" || return 1
     blender "$BASE/blender/$PAL.blend" --python-exit-code 1 --python scripts/export_realtime.py -- "${ARGS[@]}" \
       | grep -E "^wrote|^FIT|^texture|WARNING|rejected|Error|Traceback"
   }
@@ -94,13 +103,13 @@ EOF
   export_pack || return 1
   # Clips still far too big after fitting are dropped and the pack re-exported until it settles.
   for _ in 1 2 3; do
-    python3 scripts/check_pack.py "$PAL" --bounds-only && break
+    "$PY" scripts/check_pack.py "$PAL" --bounds-only && break
     step re-export after dropping oversized clips
     export_pack || return 1
   done
 
   step behavior check
-  python3 scripts/check_pack.py "$PAL" || return 1
+  "$PY" scripts/check_pack.py "$PAL" || return 1
 
   step install
   local PACK="$BASE/realtime"

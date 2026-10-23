@@ -456,6 +456,11 @@ for action in sorted(bpy.data.actions, key=lambda a: a.name):
             if game and not 0.3 * game <= speed <= 2 * game:
                 print(f'{name}: measured stride speed {speed} m/s rejected; using game speed {game}')
                 speed = game
+            elif not game and speed <= 0.05:
+                # No game speed to fall back on: a gentle walk, about Sekhmet's pace for her size.
+                fallback = round(0.75 * LIMIT['top'] / pack_limits.RISE, 3)
+                print(f'WARNING {name}: measured stride speed {speed} m/s rejected and no game speed; using {fallback}')
+                speed = fallback
         entry['groundSpeed'] = speed
     if lift_factor is not None:
         entry['pelvisLiftScale'] = round(lift_factor, 4)

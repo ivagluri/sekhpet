@@ -198,7 +198,10 @@ def main():
 
     # Game speeds are for the game-scaled body; convert to model metres per second.
     tables = json.loads((ROOT / 'work/tables/tables.json').read_text())
-    params = next(v for k, v in tables.items() if 'MonsterParameter' in k)[0]['Rows'].get(pal, {})
+    rows = next(v for k, v in tables.items() if 'MonsterParameter' in k)[0]['Rows']
+    # A pal built under its mesh name (no stats row of its own) moves like the base pal
+    # whose animations it shares.
+    params = rows.get(pal) or rows.get(anims, {})
     locomotion = {}
     for gait, (weight, max_seconds, field) in GAITS.items():
         if gait in names:

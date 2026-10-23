@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         static let watch = "watchCursor"
         static let wander = "wander"
         static let powerSaving = "powerSaving"
+        static let house = "petHouse"
     }
 
     private var packs: [PetPack] = []
@@ -25,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var userPaused = false
     private var wander = UserDefaults.standard.object(forKey: Defaults.wander) as? Bool ?? true
     private var relaunching = false
+    private var house: PetHouse?
     private var size = PetSize(rawValue: UserDefaults.standard.string(forKey: Defaults.size) ?? "") ?? .medium
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -39,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // With nothing installed, start where pets get added.
         if packs.isEmpty { showPicker() }
         observeSystem()
+        if UserDefaults.standard.bool(forKey: Defaults.house) { setHouse(true) }
 
         // Behavior and window movement run on the display's refresh, so walking is smooth.
         displayLink = (NSScreen.main ?? NSScreen.screens[0]).displayLink(target: self, selector: #selector(frame))
@@ -49,6 +52,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func frame() {
         let now = CACurrentMediaTime()
         for pet in pets { pet.frame(at: now) }
+        house?.frame(at: now)
+    }
+
+    // MARK: Pet House
+
+    /// Moves every pet into the Pet House window, or back out to the desktop.
+    private func setHouse(_ on: Bool) {
+        UserDefaults.standard.set(on, forKey: Defaults.house)
+        if on {
+            if house == nil {
+                let house = PetHouse()
+                house.onClose = { [unowned self] in setHouse(false) }
+                house.lowPower = lowPower
+                house.setPaused(userPaused)
+                for pet in pets { house.add(pet) }
+                self.house = house
+            }
+            house?.show()
+        } else {
+            house?.onClose = nil
+            house?.close()
+            house = nil
+        }
     }
 
     // MARK: Pet library
@@ -110,6 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if on, !pets.contains(where: { $0.name == name }), let pack = packs.first(where: { $0.name == name }) {
             place(pack)
         } else if !on, let index = pets.firstIndex(where: { $0.name == name }) {
+            house?.remove(pets[index])
             pets.remove(at: index).close()
         }
         let names = pets.map(\.name)
@@ -128,6 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pet.onRenderStuck = { [unowned self] in relaunch() }
             pet.contextMenu = { [unowned self, unowned pet] in menu.contextMenu(for: pet) }
             pets.append(pet)
+            house?.add(pet)
         } catch {
             let alert = NSAlert(error: error)
             alert.messageText = "Couldn't load \(pack.displayName)"
@@ -200,6 +228,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func applyPowerSaving() {
         let low = lowPower
         for pet in pets { pet.lowPower = low }
+        house?.lowPower = low
         displayLink?.preferredFrameRateRange = low ? CAFrameRateRange(minimum: 20, maximum: 30, preferred: 30)
                                                    : CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
     }
@@ -233,6 +262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             togglePaused: { [unowned self] in
                 userPaused.toggle()
                 for pet in pets { pet.setPaused(userPaused, .user) }
+                house?.setPaused(userPaused)
             },
             toggleWander: { [unowned self] in
                 wander.toggle()
@@ -259,6 +289,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             powerSaving: { [unowned self] in powerSaving },
             choosePets: { [unowned self] in showPicker() },
+            toggleHouse: { [unowned self] in setHouse(house == nil) },
+            isHouseOpen: { [unowned self] in house != nil },
             resetToDefaults: { [unowned self] in resetToDefaults() },
             removePet: { [unowned self] in setEnabled($0, false) },
             isPaused: { [unowned self] in userPaused },

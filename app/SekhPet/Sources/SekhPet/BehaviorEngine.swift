@@ -263,6 +263,11 @@ final class BehaviorEngine {
         }
     }
 
+    /// Ends whatever is holding in a loop (a walk steered from outside, say) and moves on.
+    func release() {
+        current?.release(on: rig, at: clock())
+    }
+
     func setMode(_ newMode: Mode) {
         guard newMode != mode else { return }
         mode = newMode

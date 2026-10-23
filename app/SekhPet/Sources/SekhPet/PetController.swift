@@ -79,6 +79,13 @@ final class PetController {
     }
 
     func frame(at now: TimeInterval) {
+        if housed {
+            guard !engine.isPaused else { return }
+            engine.tick()
+            stage.rig.motion.update(at: now)
+            stage.rig.look.update(cursor: nil, at: now)
+            return
+        }
         // Before the pause check: a pet off every screen counts as hidden, so it's paused.
         returnIfOffScreen(at: now)
         // Also before it: a pet covered along with its window must come back up with it.
@@ -99,6 +106,42 @@ final class PetController {
         stage.rig.look.update(cursor: cursorInScene(), at: now)
         updatePerch(at: now)
         restartRenderingIfStalled(at: now)
+    }
+
+    // MARK: Pet House
+
+    /// While in the Pet House, the pet's body lives in the house's scene and its window is hidden.
+    private(set) var housed = false
+
+    /// Hands the pet's body to the Pet House, standing still at neutral depth.
+    func enterHouse() -> SCNNode {
+        housed = true
+        perch = nil
+        fall = nil
+        jump = nil
+        awaitedWindow = nil
+        panel.orderOut(nil)
+        setPaused(false, .occluded)
+        sceneView.isPlaying = false
+        stage.rig.motion.isPinned = true
+        stage.rig.actor.setDepth(0, over: 0)
+        let body = stage.rig.actor.node
+        body.removeFromParentNode()
+        return body
+    }
+
+    /// Takes the body back and returns to the desktop where the pet was.
+    func leaveHouse() {
+        guard housed else { return }
+        housed = false
+        let body = stage.rig.actor.node
+        body.removeFromParentNode()
+        stage.scene.rootNode.addChildNode(body)
+        applyPinned()
+        panel.orderFrontRegardless()
+        sceneView.isPlaying = !engine.isPaused
+        renderWatch.reset()
+        snapToSurface(within: 6)
     }
 
     // MARK: Standing on windows
@@ -461,7 +504,8 @@ final class PetController {
     }
 
     private func applyPinned() {
-        let pinned = isPinned || !wanderAllowed
+        // In the Pet House the house moves the pet; its clips play in place.
+        let pinned = housed || isPinned || !wanderAllowed
         guard pinned != stage.rig.motion.isPinned else { return }
         stage.rig.motion.isPinned = pinned
         if pinned { stage.rig.actor.setDepth(0, over: 1) }
@@ -535,7 +579,7 @@ final class PetController {
         let shouldPause = !pauseReasons.isEmpty
         guard shouldPause != engine.isPaused else { return }
         stage.scene.isPaused = shouldPause
-        sceneView.isPlaying = !shouldPause
+        sceneView.isPlaying = !shouldPause && !housed
         if shouldPause { engine.pause() } else { engine.resume() }
         // A pause isn't a stall.
         renderWatch.reset()
@@ -620,7 +664,7 @@ final class PetController {
                                                object: panel, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.setPaused(!self.panel.occlusionState.contains(.visible), .occluded)
+                self.setPaused(!self.housed && !self.panel.occlusionState.contains(.visible), .occluded)
             }
         }
     }

@@ -40,7 +40,7 @@ It finds the usual Steam install; otherwise pass `--pak <path to Pal-Windows.pak
 bash scripts/make_pet.sh KingWhale-extract.zip    # several zips at once is fine
 ```
 
-This converts the pal, builds and checks the pack, and installs it. If the game is on a Linux box you can reach over SSH, `bash scripts/extract_remote.sh <host> <Pal>...` does the extraction there and the rest here in one go. Open the app's paw menu, **Choose Pets…**, and switch the pal on. After the first pal, `python3 scripts/index_paldeck.py --print` lists every pal's display name next to its internal name.
+This converts the pal, builds and checks the pack, and installs it. Open the app's paw menu, **Choose Pets…**, and switch the pal on. After the first pal, `python3 scripts/index_paldeck.py --print` lists every pal's display name next to its internal name.
 
 Building one pal takes about a minute, more for large ones. Review `work/<pal>/check-sheet.png`, which shows ten moments of a scripted test run; [PIPELINE.md](PIPELINE.md) says what to look for.
 

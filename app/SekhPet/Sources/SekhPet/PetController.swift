@@ -101,6 +101,8 @@ final class PetController {
         didSet { stage.rig.motion.holdsDepth = perch != nil }
     }
     private var perchFrame = NSRect.zero
+    /// The window the pet just stepped off, possibly still shrinking away: never a landing spot.
+    private var leftWindow: CGWindowID?
     private var fall: (fromY: CGFloat, toY: CGFloat, started: TimeInterval)?
     private static let gravity: CGFloat = 2500  // points per second squared
 
@@ -122,7 +124,8 @@ final class PetController {
         let feet = frame.minY + floorInWindow
         var best: (top: CGFloat, window: DesktopSurfaces.Surface?)?
         for surface in DesktopSurfaces.windows()
-            where surface.frame.minX <= frame.midX && frame.midX <= surface.frame.maxX
+            where surface.window != leftWindow
+               && surface.frame.minX <= frame.midX && frame.midX <= surface.frame.maxX
                && abs(surface.frame.maxY - feet) <= gap && abs(surface.frame.maxY - feet) < abs((best?.top ?? .infinity) - feet) {
             best = (surface.frame.maxY, surface)
         }
@@ -161,6 +164,12 @@ final class PetController {
             startFall(at: now)
             return
         }
+        // A window that changes size while its top edge moves is minimizing (the genie
+        // or scale effect) or being resized from the top: step off rather than ride it.
+        if window.frame.size != perchFrame.size, window.frame.maxY != perchFrame.maxY {
+            startFall(at: now)
+            return
+        }
         // Ride along with the window's top-left corner.
         let dx = window.frame.minX - perchFrame.minX, dy = window.frame.maxY - perchFrame.maxY
         if dx != 0 || dy != 0 {
@@ -171,12 +180,14 @@ final class PetController {
 
     /// Drops to the highest window top below the pet's feet, or the screen bottom.
     private func startFall(at now: TimeInterval) {
+        leftWindow = perch
         perch = nil
         let frame = panel.frame
         let feet = frame.minY + floorInWindow
         var landing = screenUnderPet.visibleFrame.minY
         for surface in DesktopSurfaces.windows()
-            where surface.frame.minX <= frame.midX && frame.midX <= surface.frame.maxX
+            where surface.window != leftWindow
+               && surface.frame.minX <= frame.midX && frame.midX <= surface.frame.maxX
                && surface.frame.maxY < feet - 1 && surface.frame.maxY > landing {
             landing = surface.frame.maxY
         }
@@ -322,6 +333,7 @@ final class PetController {
             case .doubleClick: engine.doubleClick()
             case .dragBegan:
                 perch = nil
+                leftWindow = nil
                 fall = nil
                 engine.dragBegan()
             case .dragEnded:

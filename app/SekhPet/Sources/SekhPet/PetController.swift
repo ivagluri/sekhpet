@@ -122,7 +122,7 @@ final class PetController {
         awaitedWindow = nil
         panel.orderOut(nil)
         setPaused(false, .occluded)
-        sceneView.isPlaying = false
+        setDrawing(false)
         stage.rig.motion.isPinned = true
         stage.rig.actor.setDepth(0, over: 0)
         let body = stage.rig.actor.node
@@ -139,7 +139,7 @@ final class PetController {
         stage.scene.rootNode.addChildNode(body)
         applyPinned()
         panel.orderFrontRegardless()
-        sceneView.isPlaying = !engine.isPaused
+        setDrawing(!engine.isPaused)
         renderWatch.reset()
         snapToSurface(within: 6)
     }
@@ -574,12 +574,19 @@ final class PetController {
         view.preferredFramesPerSecond = travelling ? (lowPower ? 30 : 60) : (lowPower ? 20 : 30)
     }
 
+    /// Stopping the scene isn't enough: a view that renders continuously keeps drawing
+    /// its last frame, even with its window hidden. Stopped views draw nothing.
+    private func setDrawing(_ on: Bool) {
+        sceneView.isPlaying = on
+        sceneView.rendersContinuously = on
+    }
+
     func setPaused(_ paused: Bool, _ reason: PauseReason) {
         if paused { pauseReasons.insert(reason) } else { pauseReasons.remove(reason) }
         let shouldPause = !pauseReasons.isEmpty
         guard shouldPause != engine.isPaused else { return }
         stage.scene.isPaused = shouldPause
-        sceneView.isPlaying = !shouldPause && !housed
+        setDrawing(!shouldPause && !housed)
         if shouldPause { engine.pause() } else { engine.resume() }
         // A pause isn't a stall.
         renderWatch.reset()

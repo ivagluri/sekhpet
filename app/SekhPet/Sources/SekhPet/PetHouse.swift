@@ -195,6 +195,12 @@ final class PetHouse: NSObject, NSWindowDelegate {
         guard let index = residents.firstIndex(where: { $0.pet === pet }) else { return }
         let resident = residents.remove(at: index)
         if case let .pet(held, _, _)? = grabbed, held === resident { grabbed = nil }
+        // The house ends its walks itself; on the desktop nothing would, and a held pet would stay held.
+        switch resident.plan {
+        case .walk: pet.engine.settle()
+        case .carried: pet.engine.dragEnded()
+        default: break
+        }
         for other in residents { other.forget(resident) }
         resident.holder.removeFromParentNode()
         resident.collider.removeFromParentNode()

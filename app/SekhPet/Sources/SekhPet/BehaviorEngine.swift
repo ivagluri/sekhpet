@@ -268,6 +268,11 @@ final class BehaviorEngine {
         current?.release(on: rig, at: clock())
     }
 
+    /// Drops whatever is playing or queued and goes back to the baseline.
+    func settle() {
+        perform(baseline(), asBaseline: true, at: clock())
+    }
+
     func setMode(_ newMode: Mode) {
         guard newMode != mode else { return }
         mode = newMode

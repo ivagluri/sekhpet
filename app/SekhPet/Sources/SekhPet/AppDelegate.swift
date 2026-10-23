@@ -124,7 +124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if userPaused { pet.setPaused(true, .user) }
             pet.wanderAllowed = wander
             pet.lowPower = lowPower
-            pet.engine.watch = watch
+            pet.defaultWatch = watch
             pet.onRenderStuck = { [unowned self] in relaunch() }
             pet.contextMenu = { [unowned self, unowned pet] in menu.contextMenu(for: pet) }
             pets.append(pet)
@@ -234,7 +234,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             setWatch: { [unowned self] watch in
                 UserDefaults.standard.set(watch.rawValue, forKey: Defaults.watch)
-                for pet in pets { pet.engine.watch = watch }
+                for pet in pets { pet.defaultWatch = watch }
             },
             watch: { [unowned self] in watch },
             setPowerSaving: { [unowned self] saving in

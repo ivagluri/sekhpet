@@ -113,7 +113,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.addItem(submenu("Surprises", intervals))
 
         let watching = NSMenu()
-        for (watch, title) in [(BehaviorEngine.Watch.occasionally, "Occasionally"), (.always, "Always"), (.never, "Never")] {
+        for (watch, title) in Self.watchTitles {
             let item = entry(title, "") { [actions] in actions.setWatch(watch) }
             item.state = actions.watch() == watch ? .on : .off
             watching.addItem(item)
@@ -167,25 +167,48 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.addItem(snapItem(pet))
         menu.addItem(doubleClickMenu(pet))
         menu.addItem(submenu(engine.mode == .loop ? "Loop Animation" : "Play Now", playMenu(pet)))
-        if pet.stage.rig.look.isAvailable {
-            menu.addItem(entry("Watch Cursor Now", "") { pet.engine.watchCursorNow() })
-        }
+        if let watching = watchMenu(pet) { menu.addItem(watching) }
         menu.addItem(entry("Reset Position", "") { pet.resetPosition() })
         menu.addItem(.separator())
         menu.addItem(entry("Remove from Desktop", "") { [actions] in actions.removePet(pet.name) })
         return menu
     }
 
-    /// The pet's right-click menu: its Wander and Snap to Windows toggles, double-click action, and removal.
+    /// The pet's right-click menu: its Wander and Snap to Windows toggles, double-click action,
+    /// Watch Cursor, and removal.
     func contextMenu(for pet: PetController) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
         menu.addItem(wanderItem(pet))
         menu.addItem(snapItem(pet))
         menu.addItem(doubleClickMenu(pet))
+        if let watching = watchMenu(pet) { menu.addItem(watching) }
         menu.addItem(.separator())
         menu.addItem(entry("Remove from Desktop", "") { [actions] in actions.removePet(pet.name) })
         return menu
+    }
+
+    private static let watchTitles: [(BehaviorEngine.Watch, String)] =
+        [(.occasionally, "Occasionally"), (.always, "Always"), (.never, "Never")]
+
+    /// This pet's own Watch Cursor setting, or the shared one, and a spell right now.
+    /// None for a pet whose rig can't turn its head.
+    private func watchMenu(_ pet: PetController) -> NSMenuItem? {
+        guard pet.stage.rig.look.isAvailable else { return nil }
+        let menu = NSMenu()
+        let shared = Self.watchTitles.first { $0.0 == pet.defaultWatch }?.1 ?? ""
+        let reset = entry("Default (\(shared))", "") { pet.setWatch(nil) }
+        reset.state = pet.watchOverride == nil ? .on : .off
+        menu.addItem(reset)
+        menu.addItem(.separator())
+        for (watch, title) in Self.watchTitles {
+            let item = entry(title, "") { pet.setWatch(watch) }
+            item.state = pet.watchOverride == watch ? .on : .off
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
+        menu.addItem(entry("Now", "") { pet.engine.watchCursorNow() })
+        return submenu("Watch Cursor", menu)
     }
 
     /// Dropped on a window's top edge, the pet stands and walks on it.

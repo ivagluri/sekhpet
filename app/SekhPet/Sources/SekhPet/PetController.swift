@@ -17,6 +17,7 @@ final class PetController {
         static let doubleClickClip = "doubleClickClip"
         static let doubleClickGroup = "doubleClickGroup"
         static let doubleClickRandom = "doubleClickRandom"
+        static let watch = "watchCursor"
     }
 
     let stage: PetStage
@@ -378,6 +379,19 @@ final class PetController {
         saveOrigin()
     }
 
+    /// The shared Watch Cursor setting, used unless this pet has its own.
+    var defaultWatch = BehaviorEngine.Watch.occasionally {
+        didSet { engine.watch = watchOverride ?? defaultWatch }
+    }
+    /// This pet's own Watch Cursor setting; nil follows the shared one. Saved.
+    private(set) var watchOverride: BehaviorEngine.Watch?
+
+    func setWatch(_ watch: BehaviorEngine.Watch?) {
+        watchOverride = watch
+        engine.watch = watch ?? defaultWatch
+        defaults.set(watch?.rawValue, forKey: key(Key.watch))
+    }
+
     /// Fewer frames and no anti-aliasing (Low Power).
     var lowPower = false {
         didSet { if lowPower != oldValue { applyRendering(to: sceneView) } }
@@ -527,6 +541,7 @@ final class PetController {
         }
         engine.doubleClickRandom = defaults.bool(forKey: key(Key.doubleClickRandom))
         isPinned = string(Key.movement) == "pinned"
+        watchOverride = string(Key.watch).flatMap(BehaviorEngine.Watch.init(rawValue:))
         applyPinned()
         let clip = string(Key.loopClip)
         let group = string(Key.loopGroup)

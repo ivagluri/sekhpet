@@ -177,6 +177,8 @@ final class PetController {
     /// Follows the perch window, or falls when it's gone; animates a fall in progress.
     /// Without `canFall` (while paused) it only rides, and leaves any fall for later.
     private func updatePerch(at now: TimeInterval, canFall: Bool = true) {
+        if canFall, animateJump(at: now) { return }
+        if canFall, perch == nil, fall == nil { watchForReturn(at: now) }
         if let fall {
             guard canFall else { return }
             let t = now - fall.started
@@ -193,7 +195,10 @@ final class PetController {
         guard let perch, !sceneView.isDragging, let checked = checkPerch(perch, at: now) else { return }
         let frame = panel.frame
         guard let window = checked else {
-            if canFall { startFall(at: now) }
+            if canFall {
+                rememberForReturn(perch)
+                startFall(at: now)
+            }
             return
         }
         // Mission Control and Show Desktop shrink and slide windows, then put them back:
@@ -213,7 +218,10 @@ final class PetController {
             // A window that changes size while its top edge moves is minimizing (the genie
             // or scale effect) or being resized from the top: step off rather than ride it.
             if window.frame.size != perchFrame.size, window.frame.maxY != perchFrame.maxY {
-                if canFall { startFall(at: now) }
+                if canFall {
+                    rememberForReturn(perch)
+                    startFall(at: now)
+                }
                 return
             }
         }
@@ -293,6 +301,57 @@ final class PetController {
         let x = min(max(frame.minX, visible.minX), visible.maxX - frame.width)
         panel.setFrameOrigin(NSPoint(x: x, y: visible.minY - floorInWindow))
         saveOrigin()
+    }
+
+    // MARK: Jumping back
+
+    /// The window the pet fell from when it minimized or hid, where on it the pet stood,
+    /// whether it has been seen gone, and its last frame, to wait for it to settle.
+    private var awaitedWindow: (id: CGWindowID, offset: CGFloat, gone: Bool, lastFrame: NSRect)?
+    private var jump: (from: NSPoint, to: NSPoint, started: TimeInterval, duration: TimeInterval)?
+    private var nextReturnCheck: TimeInterval = 0
+
+    private func rememberForReturn(_ window: CGWindowID) {
+        awaitedWindow = (window, panel.frame.midX - perchFrame.minX, false, .zero)
+    }
+
+    /// Jumps back onto the awaited window once it's back on screen and has stopped
+    /// animating (restoring from the Dock, or unhiding).
+    private func watchForReturn(at now: TimeInterval) {
+        guard let awaited = awaitedWindow, !sceneView.isDragging, now >= nextReturnCheck else { return }
+        nextReturnCheck = ((now * 10).rounded(.down) + 1) / 10
+        guard let window = DesktopSurfaces.snapshot(at: now).windows[awaited.id]?.surface else {
+            awaitedWindow?.gone = true
+            return
+        }
+        awaitedWindow?.lastFrame = window.frame
+        guard awaited.gone, window.frame == awaited.lastFrame else { return }
+        awaitedWindow = nil
+        let frame = panel.frame
+        let midX = min(max(window.frame.minX + awaited.offset, window.frame.minX + 20), window.frame.maxX - 20)
+        let to = NSPoint(x: midX - frame.width / 2, y: window.frame.maxY - floorInWindow)
+        let rise = abs(to.y - frame.minY)
+        // Leaves the ground once the take-off clip (JumpStart, where there is one) has played.
+        let takeOff = engine.jumpBegan()
+        jump = (frame.origin, to, now + takeOff, min(0.9, 0.45 + Double(rise) / 2000))
+        leftWindow = nil
+    }
+
+    /// A jump in progress: an arc up and over to the window top, then the landing.
+    private func animateJump(at now: TimeInterval) -> Bool {
+        guard let jump else { return false }
+        let t = max(0, min(1, (now - jump.started) / jump.duration))
+        let arc = max(80, abs(jump.to.y - jump.from.y) * 0.25)
+        let x = jump.from.x + (jump.to.x - jump.from.x) * t
+        let y = jump.from.y + (jump.to.y - jump.from.y) * t + arc * 4 * t * (1 - t)
+        panel.setFrameOrigin(NSPoint(x: x, y: y))
+        if t >= 1 {
+            self.jump = nil
+            snapToSurface(within: 4)
+            engine.jumpEnded()
+            saveOrigin()
+        }
+        return true
     }
 
     /// Drops to the highest window top below the pet's feet, or the screen bottom.
@@ -470,6 +529,8 @@ final class PetController {
                 perch = nil
                 leftWindow = nil
                 fall = nil
+                jump = nil
+                awaitedWindow = nil
                 engine.dragBegan()
             case .dragEnded:
                 engine.dragEnded()

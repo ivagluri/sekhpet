@@ -231,6 +231,25 @@ final class BehaviorEngine {
         perform(.group(group, in: rig.catalog), at: clock())
     }
 
+    /// A jump of the pet's own: the landing group (Jump: its start clips, then its loop
+    /// held in the air) until `jumpEnded`. Returns how long the take-off lasts.
+    @discardableResult
+    func jumpBegan() -> TimeInterval {
+        let catalog = rig.catalog
+        guard let name = catalog.input.dropGroup, let group = catalog.groups[name] else {
+            dragBegan()
+            return 0
+        }
+        perform(.group(name, in: catalog), at: clock())
+        return group.start.compactMap { catalog.clips[$0]?.duration }.reduce(0, +)
+    }
+
+    /// The landing: the jump group's end (JumpEnd).
+    func jumpEnded() {
+        guard rig.catalog.input.dropGroup != nil else { return dragEnded() }
+        current?.release(on: rig, at: clock())
+    }
+
     func dragEnded() {
         let input = rig.catalog.input
         if let group = input.dropGroup, group == input.dragGroup {

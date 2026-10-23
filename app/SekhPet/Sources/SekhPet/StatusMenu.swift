@@ -164,6 +164,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         modes.addItem(loop)
         menu.addItem(submenu("Mode", modes))
         menu.addItem(wanderItem(pet))
+        menu.addItem(snapItem(pet))
         menu.addItem(submenu(engine.mode == .loop ? "Loop Animation" : "Play Now", playMenu(pet)))
         if pet.stage.rig.look.isAvailable {
             menu.addItem(entry("Watch Cursor Now", "") { pet.engine.watchCursorNow() })
@@ -174,14 +175,23 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         return menu
     }
 
-    /// The pet's right-click menu: just its Wander toggle and removal.
+    /// The pet's right-click menu: its Wander and Snap to Windows toggles, and removal.
     func contextMenu(for pet: PetController) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
         menu.addItem(wanderItem(pet))
+        menu.addItem(snapItem(pet))
         menu.addItem(.separator())
         menu.addItem(entry("Remove from Desktop", "") { [actions] in actions.removePet(pet.name) })
         return menu
+    }
+
+    /// Dropped on a window's top edge, the pet stands and walks on it.
+    private func snapItem(_ pet: PetController) -> NSMenuItem {
+        let item = entry("Snap to Windows", "") { pet.setSnapping(!pet.snapping) }
+        item.state = pet.snapping ? .on : .off
+        item.toolTip = "Dropped on a window's top edge, this pet stands and walks on it"
+        return item
     }
 
     /// Greyed out while the shared Wander switch pins every pet.

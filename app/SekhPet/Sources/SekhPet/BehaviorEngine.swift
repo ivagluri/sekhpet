@@ -411,7 +411,7 @@ final class BehaviorEngine {
         }
         let distance = max(shortest, min(speed * seconds, space))
         let depth = rig.actor.depth
-        let depthTo = !rig.motion.isPinned && Double.random(in: 0..<1) < settings.depthChance
+        let depthTo = !rig.motion.isPinned && !rig.motion.holdsDepth && Double.random(in: 0..<1) < settings.depthChance
             ? Double.random(in: PetActor.depthRange) : depth
         let travel = Step.Travel(dx: side * distance, depthTo: depthTo, speed: speed)
         return ClipSequence(name: "Wander (\(name))", steps: [Step(clip: name, loops: nil, travel: travel)], side: side)

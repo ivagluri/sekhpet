@@ -13,6 +13,7 @@ final class PetController {
         static let loopClip = "loopClip"
         static let loopGroup = "loopGroup"
         static let movement = "movement"
+        static let snapping = "snapToWindows"
     }
 
     let stage: PetStage
@@ -54,6 +55,8 @@ final class PetController {
         observeOcclusion()
         engine.tick()
         panel.orderFrontRegardless()
+        // Back on the window it was standing on, if that's still there.
+        snapToSurface(within: 6)
     }
 
     /// Takes the pet off the desktop and releases its window and timers.
@@ -71,8 +74,115 @@ final class PetController {
         guard !engine.isPaused else { return }
         engine.tick()
         stage.rig.motion.update(at: now)
+        let moving = stage.rig.motion.isMoving && !stage.rig.motion.isPinned
+        if moving != travelling {
+            travelling = moving
+            applyRendering(to: sceneView)
+        }
         stage.rig.look.update(cursor: cursorInScene(), at: now)
+        updatePerch(at: now)
         restartRenderingIfStalled(at: now)
+    }
+
+    // MARK: Standing on windows
+
+    /// Snap to Windows: a pet dropped near a window's top edge (or the bottom of the
+    /// screen) lands on it, walks only along it, rides along when it moves, and falls
+    /// to the next surface below when it goes away.
+    /// Per pet, saved; on unless turned off.
+    private(set) var snapping = true
+
+    func setSnapping(_ on: Bool) {
+        snapping = on
+        if !on { perch = nil }
+        defaults.set(on, forKey: key(Key.snapping))
+    }
+    private var perch: CGWindowID? {
+        didSet { stage.rig.motion.holdsDepth = perch != nil }
+    }
+    private var perchFrame = NSRect.zero
+    private var fall: (fromY: CGFloat, toY: CGFloat, started: TimeInterval)?
+    private static let gravity: CGFloat = 2500  // points per second squared
+
+    /// Height of the pet's feet above the window's bottom edge, in points.
+    private var floorInWindow: CGFloat { -stage.bounds.minY * pointsPerMetre }
+
+    private var screenUnderPet: NSScreen {
+        let frame = panel.frame
+        return NSScreen.screens.first { $0.frame.minX <= frame.midX && frame.midX < $0.frame.maxX }
+            ?? NSScreen.main ?? NSScreen.screens[0]
+    }
+
+    /// Lands on the nearest window top or screen bottom within `gap` points of the
+    /// pet's feet, under its centre. Returns whether it found one.
+    @discardableResult
+    private func snapToSurface(within gap: CGFloat) -> Bool {
+        guard snapping else { return false }
+        let frame = panel.frame
+        let feet = frame.minY + floorInWindow
+        var best: (top: CGFloat, window: DesktopSurfaces.Surface?)?
+        for surface in DesktopSurfaces.windows()
+            where surface.frame.minX <= frame.midX && frame.midX <= surface.frame.maxX
+               && abs(surface.frame.maxY - feet) <= gap && abs(surface.frame.maxY - feet) < abs((best?.top ?? .infinity) - feet) {
+            best = (surface.frame.maxY, surface)
+        }
+        let bottom = screenUnderPet.visibleFrame.minY
+        if abs(bottom - feet) <= gap, abs(bottom - feet) < abs((best?.top ?? .infinity) - feet) {
+            best = (bottom, nil)
+        }
+        guard let best else { return false }
+        perch = best.window?.window
+        perchFrame = best.window?.frame ?? .zero
+        if perch != nil { stage.rig.actor.setDepth(0, over: 0.3) }
+        panel.setFrameOrigin(NSPoint(x: frame.minX, y: best.top - floorInWindow))
+        return true
+    }
+
+    /// Follows the perch window, or falls when it's gone; animates a fall in progress.
+    private func updatePerch(at now: TimeInterval) {
+        if let fall {
+            let t = now - fall.started
+            let y = max(fall.toY, fall.fromY - 0.5 * Self.gravity * t * t)
+            panel.setFrameOrigin(NSPoint(x: panel.frame.minX, y: y))
+            if y <= fall.toY {
+                self.fall = nil
+                snapToSurface(within: 4)
+                engine.dragEnded()  // the landing
+                saveOrigin()
+            }
+            return
+        }
+        // Checked every frame, so the pet rides smoothly on a window being dragged.
+        guard let perch, !sceneView.isDragging else { return }
+        let frame = panel.frame
+        guard let window = DesktopSurfaces.window(perch),
+              window.frame.minX <= frame.midX + (window.frame.minX - perchFrame.minX),
+              frame.midX + (window.frame.minX - perchFrame.minX) <= window.frame.maxX else {
+            startFall(at: now)
+            return
+        }
+        // Ride along with the window's top-left corner.
+        let dx = window.frame.minX - perchFrame.minX, dy = window.frame.maxY - perchFrame.maxY
+        if dx != 0 || dy != 0 {
+            panel.setFrameOrigin(NSPoint(x: frame.minX + dx, y: frame.minY + dy))
+        }
+        perchFrame = window.frame
+    }
+
+    /// Drops to the highest window top below the pet's feet, or the screen bottom.
+    private func startFall(at now: TimeInterval) {
+        perch = nil
+        let frame = panel.frame
+        let feet = frame.minY + floorInWindow
+        var landing = screenUnderPet.visibleFrame.minY
+        for surface in DesktopSurfaces.windows()
+            where surface.frame.minX <= frame.midX && frame.midX <= surface.frame.maxX
+               && surface.frame.maxY < feet - 1 && surface.frame.maxY > landing {
+            landing = surface.frame.maxY
+        }
+        guard landing < feet - 1 else { return }
+        fall = (frame.minY, landing - floorInWindow, now)
+        engine.dragBegan()  // held in the air
     }
 
     /// Replaces the view if SceneKit has stopped drawing (seen after waking from
@@ -162,9 +272,14 @@ final class PetController {
         didSet { if lowPower != oldValue { applyRendering(to: sceneView) } }
     }
 
+    /// Set while the window is carrying the pet across the screen.
+    private var travelling = false
+
     private func applyRendering(to view: PetSceneView) {
         view.antialiasingMode = lowPower ? .none : .multisampling2X
-        view.preferredFramesPerSecond = lowPower ? 20 : 30
+        // While travelling, draw at the window's movement rate (60 Hz, or 30 in Low
+        // Power); at a lower rate a planted foot visibly slips between frames.
+        view.preferredFramesPerSecond = travelling ? (lowPower ? 30 : 60) : (lowPower ? 20 : 30)
     }
 
     func setPaused(_ paused: Bool, _ reason: PauseReason) {
@@ -205,8 +320,13 @@ final class PetController {
             switch input {
             case .click: engine.click()
             case .doubleClick: engine.doubleClick()
-            case .dragBegan: engine.dragBegan()
-            case .dragEnded: engine.dragEnded()
+            case .dragBegan:
+                perch = nil
+                fall = nil
+                engine.dragBegan()
+            case .dragEnded:
+                engine.dragEnded()
+                snapToSurface(within: 40)
             }
         }
         view.onMoved = { [unowned self] _ in saveOrigin() }
@@ -227,7 +347,9 @@ final class PetController {
             let frame = panel.frame
             let screen = NSScreen.screens.first { $0.frame.contains(NSPoint(x: frame.midX, y: frame.midY)) }
                 ?? NSScreen.main ?? NSScreen.screens[0]
-            let visible = screen.visibleFrame
+            var visible = screen.visibleFrame
+            // Standing on a window: walk only along it.
+            if perch != nil { visible = visible.intersection(NSRect(x: perchFrame.minX, y: visible.minY, width: perchFrame.width, height: visible.height)) }
             let ppm = pointsPerMetre
             return (left: (frame.midX - visible.minX) / ppm, right: (visible.maxX - frame.midX) / ppm)
         }
@@ -285,6 +407,7 @@ final class PetController {
     // MARK: Behavior settings
 
     private func restoreBehavior() {
+        snapping = defaults.object(forKey: key(Key.snapping)) as? Bool ?? true
         isPinned = string(Key.movement) == "pinned"
         applyPinned()
         let clip = string(Key.loopClip)

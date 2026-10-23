@@ -26,6 +26,9 @@ final class PetMotion {
     /// Pinned pets play travel in place: the window stays put and depth doesn't
     /// change, but travels still take as long as they would have.
     var isPinned = false
+    /// Set while standing on a window: trips stay at the current depth, since
+    /// stepping back would lift the feet off the window's edge.
+    var holdsDepth = false
 
     private let actor: PetActor
     private var active: Active?

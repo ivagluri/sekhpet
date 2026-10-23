@@ -272,6 +272,12 @@ final class PetController {
         if pinned { stage.rig.actor.setDepth(0, over: 1) }
     }
 
+    /// Plays one of the pet's surprises or travel gaits, picked at random.
+    func playRandom() {
+        let entries = catalog.surprisePool + catalog.locomotion.map { Catalog.PoolEntry(clip: $0.clip, group: nil) }
+        if let entry = entries.randomElement() { playNow(entry) }
+    }
+
     func playNow(_ entry: Catalog.PoolEntry) {
         engine.playNow(entry)
         saveBehavior()

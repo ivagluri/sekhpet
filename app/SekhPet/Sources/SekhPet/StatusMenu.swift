@@ -205,9 +205,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
 
     /// Idle, every surprise, the travel gaits (one trip, or patrolling in loop
-    /// mode), then the input reactions for auditioning.
+    /// mode), the input reactions for auditioning, then Random.
     private func playMenu(_ pet: PetController) -> NSMenu {
-        animationMenu(pet, selected: pet.engine.mode == .loop ? pet.engine.loopSelection : nil) { pet.playNow($0) }
+        let menu = animationMenu(pet, selected: pet.engine.mode == .loop ? pet.engine.loopSelection : nil) { pet.playNow($0) }
+        menu.addItem(.separator())
+        menu.addItem(entry("Random", "") { pet.playRandom() })
+        return menu
     }
 
     /// The default, then every animation, to pick what double-clicking this pet plays.

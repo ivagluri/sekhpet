@@ -46,7 +46,7 @@ Building one pal takes about a minute, more for large ones. Review `work/<pal>/c
 
 ## Using the app
 
-- **Paw menu:** each pet's own submenu (mode, Wander, Snap to Windows, Double-Click Action, Play Now, Watch Cursor Now, reset position, remove), then shared settings: Pause All, Wander, how often surprises happen, cursor watching, size, Low Power, and launch at login.
+- **Paw menu:** each pet's own submenu (mode, Wander, Snap to Windows, Double-Click Action, Play Now (any animation, or Random), Watch Cursor Now, reset position, remove), then shared settings: Pause All, Wander, how often surprises happen, cursor watching, size, Low Power, and launch at login.
 - **On the pet:** click, double-click and drag it. Right-click for its Wander and Snap to Windows toggles, Double-Click Action (any of its animations, instead of the default), and Remove from Desktop.
 - **Snap to Windows** (per pet, on by default): drop a pet on a window's top edge, a title bar for instance, and it stands there, walks along it, rides along when the window moves, and falls to the next surface below when the window closes or minimizes.
 - **Pets window** (Choose Pets…): switch pets on and off, **Add Pet…** from a zip (or drop zips on the window), and **Export as Zip…** from a pet's ••• menu to move it to another Mac.

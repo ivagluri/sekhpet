@@ -146,12 +146,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return nil
     }
 
+    /// Forgets every setting, shared and per pet, and every position, keeping only which
+    /// pets are out; then starts afresh. Launch at Login is the system's, and stays.
+    private func resetToDefaults() {
+        let alert = NSAlert()
+        alert.messageText = "Reset SekhPet to its defaults?"
+        alert.informativeText = "Every setting goes back to its default, for all pets, and the pets return to the bottom of the screen. The pets you have out stay out."
+        alert.addButton(withTitle: "Reset")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn, let domain = Bundle.main.bundleIdentifier else { return }
+        let enabled = pets.map(\.name)
+        UserDefaults.standard.removePersistentDomain(forName: domain)
+        UserDefaults.standard.set(enabled, forKey: Defaults.enabled)
+        relaunch(reason: "to reset its settings")
+    }
+
     /// Last resort when a pet's rendering can't be restarted in this process:
     /// a fresh copy of the app renders normally.
-    private func relaunch() {
+    private func relaunch(reason: String = "to restore rendering") {
         guard !relaunching, Bundle.main.bundleURL.pathExtension == "app" else { return }
         relaunching = true
-        NSLog("SekhPet: relaunching to restore rendering")
+        NSLog("SekhPet: relaunching %@", reason)
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.createsNewApplicationInstance = true
         NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { _, error in
@@ -226,7 +242,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             setSize: { [unowned self] newSize in
                 size = newSize
                 UserDefaults.standard.set(newSize.rawValue, forKey: Defaults.size)
-                for pet in pets { pet.applySize(newSize) }
+                for pet in pets { pet.defaultSize = newSize }
             },
             setInterval: { [unowned self] interval in
                 UserDefaults.standard.set(interval.rawValue, forKey: Defaults.interval)
@@ -243,6 +259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             powerSaving: { [unowned self] in powerSaving },
             choosePets: { [unowned self] in showPicker() },
+            resetToDefaults: { [unowned self] in resetToDefaults() },
             removePet: { [unowned self] in setEnabled($0, false) },
             isPaused: { [unowned self] in userPaused },
             wanders: { [unowned self] in wander },

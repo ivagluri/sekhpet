@@ -67,6 +67,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         var setPowerSaving: (PowerSaving) -> Void
         var powerSaving: () -> PowerSaving
         var choosePets: () -> Void
+        var resetToDefaults: () -> Void
         var removePet: (String) -> Void
         var isPaused: () -> Bool
         var wanders: () -> Bool
@@ -140,6 +141,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let login = entry("Launch at Login", "") { [weak self] in self?.toggleLaunchAtLogin() }
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(login)
+        menu.addItem(entry("Reset to Defaults…", "") { [actions] in actions.resetToDefaults() })
         menu.addItem(entry("Quit", "q") { NSApp.terminate(nil) })
     }
 
@@ -168,6 +170,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.addItem(doubleClickMenu(pet))
         menu.addItem(submenu(engine.mode == .loop ? "Loop Animation" : "Play Now", playMenu(pet)))
         if let watching = watchMenu(pet) { menu.addItem(watching) }
+        menu.addItem(sizeMenu(pet))
         menu.addItem(entry("Reset Position", "") { pet.resetPosition() })
         menu.addItem(.separator())
         menu.addItem(entry("Remove from Desktop", "") { [actions] in actions.removePet(pet.name) })
@@ -175,7 +178,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
 
     /// The pet's right-click menu: its Wander and Snap to Windows toggles, double-click action,
-    /// Watch Cursor, and removal.
+    /// Watch Cursor, size, and removal.
     func contextMenu(for pet: PetController) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -183,6 +186,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.addItem(snapItem(pet))
         menu.addItem(doubleClickMenu(pet))
         if let watching = watchMenu(pet) { menu.addItem(watching) }
+        menu.addItem(sizeMenu(pet))
         menu.addItem(.separator())
         menu.addItem(entry("Remove from Desktop", "") { [actions] in actions.removePet(pet.name) })
         return menu
@@ -209,6 +213,21 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
         menu.addItem(entry("Now", "") { pet.engine.watchCursorNow() })
         return submenu("Watch Cursor", menu)
+    }
+
+    /// This pet's own size, or the shared one.
+    private func sizeMenu(_ pet: PetController) -> NSMenuItem {
+        let menu = NSMenu()
+        let reset = entry("Default (\(pet.defaultSize.title))", "") { pet.setSize(nil) }
+        reset.state = pet.sizeOverride == nil ? .on : .off
+        menu.addItem(reset)
+        menu.addItem(.separator())
+        for size in PetSize.allCases {
+            let item = entry(size.title, "") { pet.setSize(size) }
+            item.state = pet.sizeOverride == size ? .on : .off
+            menu.addItem(item)
+        }
+        return submenu("Size", menu)
     }
 
     /// Dropped on a window's top edge, the pet stands and walks on it.

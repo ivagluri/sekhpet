@@ -18,6 +18,7 @@ final class PetController {
         static let doubleClickGroup = "doubleClickGroup"
         static let doubleClickRandom = "doubleClickRandom"
         static let watch = "watchCursor"
+        static let size = "petSize"
     }
 
     let stage: PetStage
@@ -47,7 +48,9 @@ final class PetController {
         stage.rig.animations.preload(catalog.playableClips)
         engine = BehaviorEngine(rig: stage.rig, clock: CACurrentMediaTime)
         self.index = index
-        self.size = size
+        defaultSize = size
+        sizeOverride = PetSize(rawValue: UserDefaults.standard.string(forKey: "\(catalog.name).\(Key.size)") ?? "")
+        self.size = sizeOverride ?? size
 
         panel = PetPanel(contentRect: .zero)
         sceneView = PetSceneView(frame: .zero)
@@ -449,12 +452,27 @@ final class PetController {
         saveBehavior()
     }
 
-    func applySize(_ newSize: PetSize) {
+    /// The shared Size setting, used unless this pet has its own.
+    var defaultSize: PetSize {
+        didSet { if sizeOverride == nil { applySize(defaultSize) } }
+    }
+    /// This pet's own size; nil follows the shared one. Saved.
+    private(set) var sizeOverride: PetSize?
+
+    func setSize(_ newSize: PetSize?) {
+        sizeOverride = newSize
+        defaults.set(newSize?.rawValue, forKey: key(Key.size))
+        applySize(newSize ?? defaultSize)
+    }
+
+    private func applySize(_ newSize: PetSize) {
+        guard newSize != size else { return }
+        let feet = panel.frame.minY + floorInWindow
         size = newSize
-        // Keep the pet's feet where they were, centred on the same spot.
+        // Keep the pet's feet where they were (on a window, say), centred on the same spot.
         let old = panel.frame
         let new = windowSize()
-        let origin = clamped(NSPoint(x: old.midX - new.width / 2, y: old.minY))
+        let origin = clamped(NSPoint(x: old.midX - new.width / 2, y: feet - floorInWindow))
         panel.setFrame(NSRect(origin: origin, size: new), display: true)
         saveOrigin()
     }

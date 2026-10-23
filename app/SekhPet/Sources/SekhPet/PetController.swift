@@ -122,6 +122,8 @@ final class PetController {
         didSet { stage.rig.motion.holdsDepth = perch != nil }
     }
     private var perchFrame = NSRect.zero
+    /// Until then, window changes come from Mission Control or Show Desktop.
+    private var overviewUntil: TimeInterval = 0
     /// The window the pet just stepped off, possibly still shrinking away: never a landing spot.
     private var leftWindow: CGWindowID?
     private var fall: (fromY: CGFloat, toY: CGFloat, started: TimeInterval)?
@@ -179,21 +181,35 @@ final class PetController {
         // Checked every frame, so the pet rides smoothly on a window being dragged.
         guard let perch, !sceneView.isDragging else { return }
         let frame = panel.frame
-        guard let window = DesktopSurfaces.window(perch),
-              window.frame.minX <= frame.midX + (window.frame.minX - perchFrame.minX),
-              frame.midX + (window.frame.minX - perchFrame.minX) <= window.frame.maxX else {
+        guard let window = DesktopSurfaces.window(perch) else {
             startFall(at: now)
             return
         }
-        // A window that changes size while its top edge moves is minimizing (the genie
-        // or scale effect) or being resized from the top: step off rather than ride it.
-        if window.frame.size != perchFrame.size, window.frame.maxY != perchFrame.maxY {
-            startFall(at: now)
-            return
+        // Mission Control and Show Desktop shrink and slide windows, then put them back:
+        // ride along through it rather than treating it as minimizing.
+        // Checked on every change, and every frame while one is under way; changes stay
+        // treated this way for a second after it ends, while windows animate back.
+        if window.frame != perchFrame || now < overviewUntil, DesktopSurfaces.missionControlActive() {
+            overviewUntil = now + 1
         }
+        if now >= overviewUntil {
+            // Stepped off the end of a window that got narrower.
+            let shifted = frame.midX + (window.frame.minX - perchFrame.minX)
+            guard window.frame.minX <= shifted, shifted <= window.frame.maxX else {
+                startFall(at: now)
+                return
+            }
+            // A window that changes size while its top edge moves is minimizing (the genie
+            // or scale effect) or being resized from the top: step off rather than ride it.
+            if window.frame.size != perchFrame.size, window.frame.maxY != perchFrame.maxY {
+                startFall(at: now)
+                return
+            }
+        }
+
         // Ride along with the window's top-left corner, but never off the screen: Show
-        // Desktop and Mission Control slide windows away and back. Staying put and keeping
-        // the old frame resumes the ride when the window returns.
+        // Desktop slides windows away and back, so the pet waits at the edge and rides
+        // back in with it.
         let dx = window.frame.minX - perchFrame.minX, dy = window.frame.maxY - perchFrame.maxY
         guard dx != 0 || dy != 0 else { return }
         let feet = NSPoint(x: frame.midX + dx, y: frame.minY + dy + floorInWindow)

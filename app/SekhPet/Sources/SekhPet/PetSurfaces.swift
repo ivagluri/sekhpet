@@ -31,6 +31,21 @@ enum DesktopSurfaces {
         }
     }
 
+    /// Whether Mission Control is open: the Dock then covers a screen with windows at
+    /// its own level and above, and shows every window shrunk and moved.
+    static func missionControlActive() -> Bool {
+        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] else { return false }
+        let screens = Set(NSScreen.screens.map { "\(Int($0.frame.width))x\(Int($0.frame.height))" })
+        let dockLevel = Int(CGWindowLevelForKey(.dockWindow)) - 2
+        return list.contains { info in
+            guard (info[kCGWindowOwnerName as String] as? String) == "Dock",
+                  let layer = info[kCGWindowLayer as String] as? Int, layer >= dockLevel,
+                  let dict = info[kCGWindowBounds as String] as? NSDictionary,
+                  let bounds = CGRect(dictionaryRepresentation: dict) else { return false }
+            return screens.contains("\(Int(bounds.width))x\(Int(bounds.height))")
+        }
+    }
+
     /// One window, if it's still on screen. Cheap enough to call every frame.
     static func window(_ id: CGWindowID) -> Surface? {
         guard let info = (CGWindowListCopyWindowInfo(.optionIncludingWindow, id) as? [[String: Any]])?.first,

@@ -7,6 +7,8 @@ enum DesktopSurfaces {
         let window: CGWindowID
         /// In AppKit screen coordinates (origin bottom-left of the main screen).
         let frame: NSRect
+        /// Window level: 0 for ordinary windows, higher for always-on-top ones.
+        let layer: Int
     }
 
     /// On-screen windows of other apps, front to back: normal windows and always-on-top
@@ -27,7 +29,7 @@ enum DesktopSurfaces {
                   let bounds = CGRect(dictionaryRepresentation: dict),
                   bounds.width >= 120, bounds.height >= 40 else { return nil }
             let frame = NSRect(x: bounds.minX, y: flipHeight - bounds.maxY, width: bounds.width, height: bounds.height)
-            return Surface(window: number, frame: frame)
+            return Surface(window: number, frame: frame, layer: layer)
         }
     }
 
@@ -50,10 +52,11 @@ enum DesktopSurfaces {
     static func window(_ id: CGWindowID) -> Surface? {
         guard let info = (CGWindowListCopyWindowInfo(.optionIncludingWindow, id) as? [[String: Any]])?.first,
               info[kCGWindowIsOnscreen as String] as? Bool == true,
+              let layer = info[kCGWindowLayer as String] as? Int,
               let dict = info[kCGWindowBounds as String] as? NSDictionary,
               let bounds = CGRect(dictionaryRepresentation: dict) else { return nil }
         let flipHeight = NSScreen.screens.first?.frame.maxY ?? 0
         return Surface(window: id, frame: NSRect(x: bounds.minX, y: flipHeight - bounds.maxY,
-                                                 width: bounds.width, height: bounds.height))
+                                                 width: bounds.width, height: bounds.height), layer: layer)
     }
 }

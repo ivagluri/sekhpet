@@ -76,7 +76,14 @@ final class PetController {
     func frame(at now: TimeInterval) {
         // Before the pause check: a pet off every screen counts as hidden, so it's paused.
         returnIfOffScreen(at: now)
-        guard !engine.isPaused else { return }
+        // Also before it: a pet covered along with its window must come back up with it.
+        keepWithWindow(at: now)
+        // A covered pet still rides its window: Mission Control covers the ones that sit
+        // with their window, and they must follow it through and back.
+        guard !engine.isPaused else {
+            updatePerch(at: now, canFall: false)
+            return
+        }
         engine.tick()
         stage.rig.motion.update(at: now)
         let moving = stage.rig.motion.isMoving && !stage.rig.motion.isPinned
@@ -122,6 +129,7 @@ final class PetController {
         didSet { stage.rig.motion.holdsDepth = perch != nil }
     }
     private var perchFrame = NSRect.zero
+    private var perchLayer = 0
     /// Until then, window changes come from Mission Control or Show Desktop.
     private var overviewUntil: TimeInterval = 0
     /// The window the pet just stepped off, possibly still shrinking away: never a landing spot.
@@ -159,14 +167,17 @@ final class PetController {
         guard let best else { return false }
         perch = best.window?.window
         perchFrame = best.window?.frame ?? .zero
+        perchLayer = best.window?.layer ?? 0
         if perch != nil { stage.rig.actor.setDepth(0, over: 0.3) }
         panel.setFrameOrigin(NSPoint(x: frame.minX, y: best.top - floorInWindow))
         return true
     }
 
     /// Follows the perch window, or falls when it's gone; animates a fall in progress.
-    private func updatePerch(at now: TimeInterval) {
+    /// Without `canFall` (while paused) it only rides, and leaves any fall for later.
+    private func updatePerch(at now: TimeInterval, canFall: Bool = true) {
         if let fall {
+            guard canFall else { return }
             let t = now - fall.started
             let y = max(fall.toY, fall.fromY - 0.5 * Self.gravity * t * t)
             panel.setFrameOrigin(NSPoint(x: panel.frame.minX, y: y))
@@ -182,7 +193,7 @@ final class PetController {
         guard let perch, !sceneView.isDragging else { return }
         let frame = panel.frame
         guard let window = DesktopSurfaces.window(perch) else {
-            startFall(at: now)
+            if canFall { startFall(at: now) }
             return
         }
         // Mission Control and Show Desktop shrink and slide windows, then put them back:
@@ -196,13 +207,13 @@ final class PetController {
             // Stepped off the end of a window that got narrower.
             let shifted = frame.midX + (window.frame.minX - perchFrame.minX)
             guard window.frame.minX <= shifted, shifted <= window.frame.maxX else {
-                startFall(at: now)
+                if canFall { startFall(at: now) }
                 return
             }
             // A window that changes size while its top edge moves is minimizing (the genie
             // or scale effect) or being resized from the top: step off rather than ride it.
             if window.frame.size != perchFrame.size, window.frame.maxY != perchFrame.maxY {
-                startFall(at: now)
+                if canFall { startFall(at: now) }
                 return
             }
         }
@@ -216,6 +227,30 @@ final class PetController {
         guard NSScreen.screens.contains(where: { $0.frame.contains(feet) }) else { return }
         panel.setFrameOrigin(NSPoint(x: frame.minX + dx, y: frame.minY + dy))
         perchFrame = window.frame
+    }
+
+    private var lastLayerCheck: TimeInterval = 0
+
+    /// A pet standing on an ordinary window sits just above that window instead of above
+    /// everything, so whatever covers the window covers the pet too. Pets on the screen
+    /// bottom or an always-on-top window, or being dragged or falling, stay on top.
+    private func keepWithWindow(at now: TimeInterval) {
+        guard now - lastLayerCheck >= 0.1 else { return }
+        lastLayerCheck = now
+        guard let perch, perchLayer == 0, !sceneView.isDragging else {
+            if panel.level != .floating {
+                panel.level = .floating
+                panel.orderFrontRegardless()
+            }
+            return
+        }
+        // Clicking the window brings it in front of the pet: go back on top of it.
+        let above = CGWindowListCopyWindowInfo(.optionOnScreenAboveWindow, perch) as? [[String: Any]] ?? []
+        if panel.level == .normal, above.contains(where: { $0[kCGWindowNumber as String] as? Int == panel.windowNumber }) {
+            return
+        }
+        panel.level = .normal
+        panel.order(.above, relativeTo: Int(perch))
     }
 
     private var lastOnScreenCheck: TimeInterval = 0

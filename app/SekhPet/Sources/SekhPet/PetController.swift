@@ -74,6 +74,8 @@ final class PetController {
     }
 
     func frame(at now: TimeInterval) {
+        // Before the pause check: a pet off every screen counts as hidden, so it's paused.
+        returnIfOffScreen(at: now)
         guard !engine.isPaused else { return }
         engine.tick()
         stage.rig.motion.update(at: now)
@@ -189,12 +191,35 @@ final class PetController {
             startFall(at: now)
             return
         }
-        // Ride along with the window's top-left corner.
+        // Ride along with the window's top-left corner, but never off the screen: Show
+        // Desktop and Mission Control slide windows away and back. Staying put and keeping
+        // the old frame resumes the ride when the window returns.
         let dx = window.frame.minX - perchFrame.minX, dy = window.frame.maxY - perchFrame.maxY
-        if dx != 0 || dy != 0 {
-            panel.setFrameOrigin(NSPoint(x: frame.minX + dx, y: frame.minY + dy))
-        }
+        guard dx != 0 || dy != 0 else { return }
+        let feet = NSPoint(x: frame.midX + dx, y: frame.minY + dy + floorInWindow)
+        guard NSScreen.screens.contains(where: { $0.frame.contains(feet) }) else { return }
+        panel.setFrameOrigin(NSPoint(x: frame.minX + dx, y: frame.minY + dy))
         perchFrame = window.frame
+    }
+
+    private var lastOnScreenCheck: TimeInterval = 0
+
+    /// Safety net: a pet whose feet are on no screen (whatever put it there) drops back
+    /// in at the nearest screen's bottom edge.
+    private func returnIfOffScreen(at now: TimeInterval) {
+        guard now - lastOnScreenCheck >= 1, !sceneView.isDragging else { return }
+        lastOnScreenCheck = now
+        let frame = panel.frame
+        let feet = NSPoint(x: frame.midX, y: frame.minY + floorInWindow)
+        guard !NSScreen.screens.contains(where: { $0.frame.contains(feet) }),
+              let screen = NSScreen.screens.min(by: { abs($0.frame.midX - feet.x) < abs($1.frame.midX - feet.x) })
+        else { return }
+        perch = nil
+        fall = nil
+        let visible = screen.visibleFrame
+        let x = min(max(frame.minX, visible.minX), visible.maxX - frame.width)
+        panel.setFrameOrigin(NSPoint(x: x, y: visible.minY - floorInWindow))
+        saveOrigin()
     }
 
     /// Drops to the highest window top below the pet's feet, or the screen bottom.

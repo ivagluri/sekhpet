@@ -204,7 +204,15 @@ final class BehaviorEngine {
         perform(.single(clip, side: rig.preferredSide(for: clip)), at: clock())
     }
 
+    /// Chosen per pet in its menus; nil plays the pack's own double-click clip.
+    var doubleClickOverride: Catalog.PoolEntry?
+
     func doubleClick() {
+        if let entry = doubleClickOverride {
+            // Played like Play Now: groups run start to end, travel gaits go for a walk.
+            perform(sequence(for: entry, loops: randomLoops()), at: clock())
+            return
+        }
         guard let clip = rig.catalog.input.doubleClick else { return }
         perform(.single(clip, side: rig.preferredSide(for: clip)), at: clock())
     }

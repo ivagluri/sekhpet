@@ -165,6 +165,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.addItem(submenu("Mode", modes))
         menu.addItem(wanderItem(pet))
         menu.addItem(snapItem(pet))
+        menu.addItem(doubleClickMenu(pet))
         menu.addItem(submenu(engine.mode == .loop ? "Loop Animation" : "Play Now", playMenu(pet)))
         if pet.stage.rig.look.isAvailable {
             menu.addItem(entry("Watch Cursor Now", "") { pet.engine.watchCursorNow() })
@@ -175,12 +176,13 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         return menu
     }
 
-    /// The pet's right-click menu: its Wander and Snap to Windows toggles, and removal.
+    /// The pet's right-click menu: its Wander and Snap to Windows toggles, double-click action, and removal.
     func contextMenu(for pet: PetController) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
         menu.addItem(wanderItem(pet))
         menu.addItem(snapItem(pet))
+        menu.addItem(doubleClickMenu(pet))
         menu.addItem(.separator())
         menu.addItem(entry("Remove from Desktop", "") { [actions] in actions.removePet(pet.name) })
         return menu
@@ -205,11 +207,32 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// Idle, every surprise, the travel gaits (one trip, or patrolling in loop
     /// mode), then the input reactions for auditioning.
     private func playMenu(_ pet: PetController) -> NSMenu {
+        animationMenu(pet, selected: pet.engine.mode == .loop ? pet.engine.loopSelection : nil) { pet.playNow($0) }
+    }
+
+    /// The default, then every animation, to pick what double-clicking this pet plays.
+    private func doubleClickMenu(_ pet: PetController) -> NSMenuItem {
+        let override = pet.engine.doubleClickOverride
+        let menu = NSMenu()
+        let reset = entry("Default (\(pet.catalog.input.doubleClick ?? "none"))", "") { pet.setDoubleClick(nil) }
+        reset.state = override == nil ? .on : .off
+        menu.addItem(reset)
+        menu.addItem(.separator())
+        let animations = animationMenu(pet, selected: override) { pet.setDoubleClick($0) }
+        for item in animations.items {
+            animations.removeItem(item)
+            menu.addItem(item)
+        }
+        return submenu("Double-Click Action", menu)
+    }
+
+    /// Idle, every surprise, the travel gaits and the input reactions, each running `pick`.
+    private func animationMenu(_ pet: PetController, selected: Catalog.PoolEntry?,
+                               pick: @escaping (Catalog.PoolEntry) -> Void) -> NSMenu {
         let menu = NSMenu()
         let catalog = pet.catalog
-        let selected = pet.engine.mode == .loop ? pet.engine.loopSelection : nil
         func add(_ entry: Catalog.PoolEntry, _ title: String) {
-            let item = self.entry(title, "") { pet.playNow(entry) }
+            let item = self.entry(title, "") { pick(entry) }
             item.state = entry == selected ? .on : .off
             menu.addItem(item)
         }

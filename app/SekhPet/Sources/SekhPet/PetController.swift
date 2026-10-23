@@ -14,6 +14,8 @@ final class PetController {
         static let loopGroup = "loopGroup"
         static let movement = "movement"
         static let snapping = "snapToWindows"
+        static let doubleClickClip = "doubleClickClip"
+        static let doubleClickGroup = "doubleClickGroup"
     }
 
     let stage: PetStage
@@ -91,6 +93,13 @@ final class PetController {
     /// to the next surface below when it goes away.
     /// Per pet, saved; on unless turned off.
     private(set) var snapping = true
+
+    /// What double-clicking plays; nil restores the pack's default.
+    func setDoubleClick(_ entry: Catalog.PoolEntry?) {
+        engine.doubleClickOverride = entry
+        defaults.set(entry?.clip, forKey: key(Key.doubleClickClip))
+        defaults.set(entry?.group, forKey: key(Key.doubleClickGroup))
+    }
 
     func setSnapping(_ on: Bool) {
         snapping = on
@@ -420,6 +429,11 @@ final class PetController {
 
     private func restoreBehavior() {
         snapping = defaults.object(forKey: key(Key.snapping)) as? Bool ?? true
+        let doubleClip = string(Key.doubleClickClip), doubleGroup = string(Key.doubleClickGroup)
+        // Ignore a saved choice the pack no longer has.
+        if doubleClip.map({ catalog.clips[$0] != nil }) ?? doubleGroup.map({ catalog.groups[$0] != nil }) ?? false {
+            engine.doubleClickOverride = Catalog.PoolEntry(clip: doubleClip, group: doubleGroup)
+        }
         isPinned = string(Key.movement) == "pinned"
         applyPinned()
         let clip = string(Key.loopClip)

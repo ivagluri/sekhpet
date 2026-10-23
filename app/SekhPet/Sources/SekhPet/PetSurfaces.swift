@@ -9,7 +9,8 @@ enum DesktopSurfaces {
         let frame: NSRect
     }
 
-    /// On-screen normal windows of other apps, front to back.
+    /// On-screen windows of other apps, front to back: normal windows and always-on-top
+    /// ones such as Activity Monitor's CPU Usage, but not the menu bar, Dock or system UI.
     static func windows() -> [Surface] {
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
                                                     kCGNullWindowID) as? [[String: Any]] else { return [] }
@@ -17,7 +18,8 @@ enum DesktopSurfaces {
         // CoreGraphics measures from the top of the main screen; AppKit from its bottom.
         let flipHeight = NSScreen.screens.first?.frame.maxY ?? 0
         return list.compactMap { info in
-            guard (info[kCGWindowLayer as String] as? Int) == 0,
+            guard let layer = info[kCGWindowLayer as String] as? Int,
+                  (0...Int(CGWindowLevelForKey(.floatingWindow))).contains(layer),
                   (info[kCGWindowOwnerPID as String] as? pid_t) != ownPID,
                   (info[kCGWindowAlpha as String] as? Double ?? 1) > 0,
                   let number = info[kCGWindowNumber as String] as? CGWindowID,

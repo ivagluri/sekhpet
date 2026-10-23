@@ -153,3 +153,74 @@ final class RenderWatch: NSObject, SCNSceneRendererDelegate, @unchecked Sendable
         last.withLock { $0 = CACurrentMediaTime() }
     }
 }
+
+/// A faint oval shadow under a dragged pet's feet, so it's easy to line the pet up with
+/// anything on screen; over a surface it would snap to, it sits on that surface and
+/// glows softly. Shown only while dragging.
+@MainActor
+final class LandingShadow {
+    private let panel: NSPanel
+    private let oval = CAGradientLayer()
+    /// A thin light rim, so the dark shadow still shows over dark wallpaper.
+    private let outline = CAShapeLayer()
+    private static let height: CGFloat = 14
+
+    init() {
+        panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
+                        backing: .buffered, defer: true)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.ignoresMouseEvents = true
+        panel.level = .floating
+        panel.isReleasedWhenClosed = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
+        let view = NSView()
+        view.wantsLayer = true
+        oval.type = .radial
+        oval.startPoint = CGPoint(x: 0.5, y: 0.5)
+        oval.endPoint = CGPoint(x: 1, y: 1)
+        view.layer?.addSublayer(oval)
+        outline.fillColor = nil
+        outline.strokeColor = NSColor.white.withAlphaComponent(0.55).cgColor
+        outline.lineWidth = 1
+        view.layer?.addSublayer(outline)
+        panel.contentView = view
+    }
+
+    private var glowing: Bool?
+
+    /// Shows the shadow centred on `point`, just behind `pet`, glowing over a snapping
+    /// surface; nil hides it.
+    func show(at point: NSPoint?, width: CGFloat, glowing: Bool = false, behind pet: NSWindow) {
+        guard let point else {
+            panel.orderOut(nil)
+            return
+        }
+        let frame = NSRect(x: point.x - width / 2, y: point.y - Self.height / 2, width: width, height: Self.height)
+        if panel.frame != frame {
+            panel.setFrame(frame, display: false)
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            oval.frame = CGRect(origin: .zero, size: frame.size)
+            outline.frame = oval.frame
+            outline.path = CGPath(ellipseIn: oval.frame.insetBy(dx: 1, dy: 1), transform: nil)
+            CATransaction.commit()
+        }
+        if glowing != self.glowing {
+            self.glowing = glowing
+            let colour = glowing ? NSColor.controlAccentColor.withAlphaComponent(0.45) : NSColor.black.withAlphaComponent(0.3)
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            oval.colors = [colour.cgColor, colour.withAlphaComponent(0).cgColor]
+            outline.isHidden = glowing
+            CATransaction.commit()
+        }
+        if !panel.isVisible || panel.level != pet.level {
+            panel.level = pet.level
+            panel.order(.below, relativeTo: pet.windowNumber)
+        }
+    }
+
+    func close() { panel.close() }
+}

@@ -75,6 +75,7 @@ final class PetController {
         sceneView.isPlaying = false
         panel.orderOut(nil)
         panel.close()
+        landingShadow.close()
     }
 
     func frame(at now: TimeInterval) {
@@ -154,11 +155,23 @@ final class PetController {
     /// pet's feet, under its centre. Returns whether it found one.
     @discardableResult
     private func snapToSurface(within gap: CGFloat) -> Bool {
-        guard snapping else { return false }
-        let frame = panel.frame
+        guard let best = landingSpot(for: panel.frame, within: gap, among: DesktopSurfaces.windows()) else { return false }
+        perch = best.window?.window
+        perchFrame = best.window?.frame ?? .zero
+        perchLayer = best.window?.layer ?? 0
+        if perch != nil { stage.rig.actor.setDepth(0, over: 0.3) }
+        panel.setFrameOrigin(NSPoint(x: panel.frame.minX, y: best.top - floorInWindow))
+        return true
+    }
+
+    /// The nearest window top or screen bottom within `gap` points of the feet of a pet
+    /// with window `frame`, under its centre.
+    private func landingSpot(for frame: NSRect, within gap: CGFloat, among surfaces: [DesktopSurfaces.Surface])
+        -> (top: CGFloat, window: DesktopSurfaces.Surface?)? {
+        guard snapping else { return nil }
         let feet = frame.minY + floorInWindow
         var best: (top: CGFloat, window: DesktopSurfaces.Surface?)?
-        for surface in DesktopSurfaces.windows()
+        for surface in surfaces
             where surface.window != leftWindow
                && surface.frame.minX <= frame.midX && frame.midX <= surface.frame.maxX
                && abs(surface.frame.maxY - feet) <= gap && abs(surface.frame.maxY - feet) < abs((best?.top ?? .infinity) - feet) {
@@ -168,13 +181,25 @@ final class PetController {
         if abs(bottom - feet) <= gap, abs(bottom - feet) < abs((best?.top ?? .infinity) - feet) {
             best = (bottom, nil)
         }
-        guard let best else { return false }
-        perch = best.window?.window
-        perchFrame = best.window?.frame ?? .zero
-        perchLayer = best.window?.layer ?? 0
-        if perch != nil { stage.rig.actor.setDepth(0, over: 0.3) }
-        panel.setFrameOrigin(NSPoint(x: frame.minX, y: best.top - floorInWindow))
-        return true
+        return best
+    }
+
+    // MARK: Landing shadow
+
+    private let landingShadow = LandingShadow()
+    /// The windows when the drag began: they don't move during it, and reading them on
+    /// every mouse move would be slow.
+    private var dragSurfaces: [DesktopSurfaces.Surface] = []
+
+    /// While dragging, a faint oval under the pet's feet, or glowing on the surface it
+    /// would snap to if let go now.
+    private func showLanding(for origin: NSPoint) {
+        let frame = NSRect(origin: origin, size: panel.frame.size)
+        let spot = landingSpot(for: frame, within: 40, among: dragSurfaces)
+        let idle = catalog.clip(catalog.idleClip).bounds
+        let width = min(max((idle.max[0] - idle.min[0]) * pointsPerMetre * 0.7, 40), 260)
+        landingShadow.show(at: NSPoint(x: frame.midX, y: spot?.top ?? frame.minY + floorInWindow),
+                           width: width, glowing: spot != nil, behind: panel)
     }
 
     /// Follows the perch window, or falls when it's gone; animates a fall in progress.
@@ -549,14 +574,21 @@ final class PetController {
                 fall = nil
                 jump = nil
                 awaitedWindow = nil
+                dragSurfaces = DesktopSurfaces.windows()
                 engine.dragBegan()
             case .dragEnded:
+                landingShadow.show(at: nil, width: 0, behind: panel)
+                dragSurfaces = []
                 engine.dragEnded()
                 snapToSurface(within: 40)
             }
         }
         view.onMoved = { [unowned self] _ in saveOrigin() }
-        view.constrainOrigin = { [unowned self] in clamped($0) }
+        view.constrainOrigin = { [unowned self] in
+            let origin = clamped($0)
+            showLanding(for: origin)
+            return origin
+        }
         view.contextMenu = { [unowned self] in contextMenu?() }
         panel.contentView = view
     }

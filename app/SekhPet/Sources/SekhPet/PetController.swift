@@ -78,7 +78,7 @@ final class PetController {
         // Before the pause check: a pet off every screen counts as hidden, so it's paused.
         returnIfOffScreen(at: now)
         // Also before it: a pet covered along with its window must come back up with it.
-        keepWithWindow(at: now)
+        keepWithWindow()
         // A covered pet still rides its window: Mission Control covers the ones that sit
         // with their window, and they must follow it through and back.
         guard !engine.isPaused else {
@@ -190,10 +190,9 @@ final class PetController {
             }
             return
         }
-        // Checked every frame, so the pet rides smoothly on a window being dragged.
-        guard let perch, !sceneView.isDragging else { return }
+        guard let perch, !sceneView.isDragging, let checked = checkPerch(perch, at: now) else { return }
         let frame = panel.frame
-        guard let window = DesktopSurfaces.window(perch) else {
+        guard let window = checked else {
             if canFall { startFall(at: now) }
             return
         }
@@ -201,7 +200,7 @@ final class PetController {
         // ride along through it rather than treating it as minimizing.
         // Checked on every change, and every frame while one is under way; changes stay
         // treated this way for a second after it ends, while windows animate back.
-        if window.frame != perchFrame || now < overviewUntil, DesktopSurfaces.missionControlActive() {
+        if perchMovedAt == now || now < overviewUntil, missionControlSeen {
             overviewUntil = now + 1
         }
         if now >= overviewUntil {
@@ -230,14 +229,38 @@ final class PetController {
         perchFrame = window.frame
     }
 
-    private var lastLayerCheck: TimeInterval = 0
+    private var nextPerchCheck: TimeInterval = 0
+    private var perchMovedAt: TimeInterval = 0
+    private var lastSeenFrame = NSRect.zero
+
+    /// The perch window, when it's due a check: every frame while it moves, for smooth
+    /// riding while it's dragged, otherwise 10 times a second, on a beat all pets share
+    /// so they read the windows once between them. (Reading from a background thread
+    /// instead stalled drawing for half a second.)
+    private func checkPerch(_ perch: CGWindowID, at now: TimeInterval) -> DesktopSurfaces.Surface?? {
+        guard now >= nextPerchCheck else { return nil }
+        let snapshot = DesktopSurfaces.snapshot(at: now)
+        let window = snapshot.windows[perch]
+        missionControlSeen = snapshot.missionControl
+        panelInFrontOfPerch = window.map { perch in
+            snapshot.windows[CGWindowID(panel.windowNumber)].map { $0.place < perch.place } ?? false
+        } ?? false
+        if let window, window.surface.frame != lastSeenFrame {
+            perchMovedAt = now
+            lastSeenFrame = window.surface.frame
+        }
+        nextPerchCheck = now - perchMovedAt < 0.5 ? now : ((now * 10).rounded(.down) + 1) / 10
+        return .some(window?.surface)
+    }
+
+    private var missionControlSeen = false
+    private var panelInFrontOfPerch = false
+
 
     /// A pet standing on an ordinary window sits just above that window instead of above
     /// everything, so whatever covers the window covers the pet too. Pets on the screen
     /// bottom or an always-on-top window, or being dragged or falling, stay on top.
-    private func keepWithWindow(at now: TimeInterval) {
-        guard now - lastLayerCheck >= 0.1 else { return }
-        lastLayerCheck = now
+    private func keepWithWindow() {
         guard let perch, perchLayer == 0, !sceneView.isDragging else {
             if panel.level != .floating {
                 panel.level = .floating
@@ -246,12 +269,10 @@ final class PetController {
             return
         }
         // Clicking the window brings it in front of the pet: go back on top of it.
-        let above = CGWindowListCopyWindowInfo(.optionOnScreenAboveWindow, perch) as? [[String: Any]] ?? []
-        if panel.level == .normal, above.contains(where: { $0[kCGWindowNumber as String] as? Int == panel.windowNumber }) {
-            return
-        }
+        if panel.level == .normal, panelInFrontOfPerch { return }
         panel.level = .normal
         panel.order(.above, relativeTo: Int(perch))
+        panelInFrontOfPerch = true
     }
 
     private var lastOnScreenCheck: TimeInterval = 0

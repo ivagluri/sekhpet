@@ -33,30 +33,42 @@ enum DesktopSurfaces {
         }
     }
 
-    /// Whether Mission Control is open: the Dock then covers a screen with windows at
-    /// its own level and above, and shows every window shrunk and moved.
-    static func missionControlActive() -> Bool {
-        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] else { return false }
-        let screens = Set(NSScreen.screens.map { "\(Int($0.frame.width))x\(Int($0.frame.height))" })
-        let dockLevel = Int(CGWindowLevelForKey(.dockWindow)) - 2
-        return list.contains { info in
-            guard (info[kCGWindowOwnerName as String] as? String) == "Dock",
-                  let layer = info[kCGWindowLayer as String] as? Int, layer >= dockLevel,
-                  let dict = info[kCGWindowBounds as String] as? NSDictionary,
-                  let bounds = CGRect(dictionaryRepresentation: dict) else { return false }
-            return screens.contains("\(Int(bounds.width))x\(Int(bounds.height))")
-        }
+    /// Every window on screen, read once and shared by all pets in the same frame. Each
+    /// read waits on the window server, and gets slower with every pet window, so pets
+    /// reading for themselves took 40% of the main thread with nine on windows.
+    struct Snapshot {
+        /// Each window and its place, front to back (0 is frontmost).
+        let windows: [CGWindowID: (place: Int, surface: Surface)]
+        /// Whether Mission Control is open: the Dock then covers a screen with windows at
+        /// its own level and above, and shows every window shrunk and moved.
+        let missionControl: Bool
     }
 
-    /// One window, if it's still on screen. Cheap enough to call every frame.
-    static func window(_ id: CGWindowID) -> Surface? {
-        guard let info = (CGWindowListCopyWindowInfo(.optionIncludingWindow, id) as? [[String: Any]])?.first,
-              info[kCGWindowIsOnscreen as String] as? Bool == true,
-              let layer = info[kCGWindowLayer as String] as? Int,
-              let dict = info[kCGWindowBounds as String] as? NSDictionary,
-              let bounds = CGRect(dictionaryRepresentation: dict) else { return nil }
+    @MainActor private static var latest: (at: TimeInterval, snapshot: Snapshot)?
+
+    /// The windows as of `now`, read at most once for that time.
+    @MainActor static func snapshot(at now: TimeInterval) -> Snapshot {
+        if let latest, latest.at == now { return latest.snapshot }
+        let list = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
         let flipHeight = NSScreen.screens.first?.frame.maxY ?? 0
-        return Surface(window: id, frame: NSRect(x: bounds.minX, y: flipHeight - bounds.maxY,
-                                                 width: bounds.width, height: bounds.height), layer: layer)
+        let screens = Set(NSScreen.screens.map { "\(Int($0.frame.width))x\(Int($0.frame.height))" })
+        let dockLevel = Int(CGWindowLevelForKey(.dockWindow)) - 2
+        var windows: [CGWindowID: (place: Int, surface: Surface)] = [:]
+        var missionControl = false
+        for (place, info) in list.enumerated() {
+            guard let number = info[kCGWindowNumber as String] as? CGWindowID,
+                  let layer = info[kCGWindowLayer as String] as? Int,
+                  let dict = info[kCGWindowBounds as String] as? NSDictionary,
+                  let bounds = CGRect(dictionaryRepresentation: dict) else { continue }
+            let frame = NSRect(x: bounds.minX, y: flipHeight - bounds.maxY, width: bounds.width, height: bounds.height)
+            windows[number] = (place, Surface(window: number, frame: frame, layer: layer))
+            if layer >= dockLevel, (info[kCGWindowOwnerName as String] as? String) == "Dock",
+               screens.contains("\(Int(bounds.width))x\(Int(bounds.height))") {
+                missionControl = true
+            }
+        }
+        let snapshot = Snapshot(windows: windows, missionControl: missionControl)
+        latest = (now, snapshot)
+        return snapshot
     }
 }

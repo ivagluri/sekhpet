@@ -11,7 +11,8 @@ struct PetPack: Identifiable {
     let paldeckNo: String?
     /// On-screen standing height in metres, after the game's mesh scale.
     let height: Double
-    let clipCount: Int
+    /// Animations to pick from, as the Pet Viewer lists them (a start/loop/end group counts once).
+    let animationCount: Int
     let thumbnail: NSImage?
 
     var id: String { name }
@@ -23,7 +24,7 @@ struct PetPack: Identifiable {
         displayName = catalog.displayName
         paldeckNo = catalog.paldeckNo
         height = catalog.clip(catalog.idleClip).bounds.max[1] * catalog.meshScale
-        clipCount = catalog.clips.count
+        animationCount = ViewerAnimation.list(for: catalog).count
         thumbnail = NSImage(contentsOf: directory.appendingPathComponent("thumbnail.png"))
     }
 }
@@ -116,7 +117,7 @@ final class PetPickerModel {
         alert.messageText = packs.count == 1 ? "Add \(packs[0].displayName)?" : "Add \(packs.count) pets?"
         var lines = packs.map { pack in
             let replaces = self.packs.contains { $0.name == pack.name } ? " (replaces the one you have)" : ""
-            return String(format: "• %@: %.2f m tall, %d animations", pack.displayName, pack.height, pack.clipCount) + replaces
+            return String(format: "• %@: %.2f m tall, %d animations", pack.displayName, pack.height, pack.animationCount) + replaces
         }
         if !problems.isEmpty { lines += ["", "Not added:"] + problems.map { "• \($0)" } }
         alert.informativeText = lines.joined(separator: "\n")
@@ -183,7 +184,7 @@ struct PetPickerView: View {
                     thumbnail(pack)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(pack.displayName).font(.headline)
-                        Text(String(format: "%.2f m tall · %d animations", pack.height, pack.clipCount))
+                        Text(String(format: "%.2f m tall · %d animations", pack.height, pack.animationCount))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()

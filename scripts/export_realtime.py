@@ -386,6 +386,13 @@ for image in bpy.data.images:
 rig.animation_data.action = None
 for bone in rig.pose.bones:
     bone.matrix_basis.identity()
+# SceneKit draws nothing of a skinned mesh exported with blend shapes (LeafMomonga's wing
+# morphs, which the game drives from curve-only assets our clips don't carry anyway).
+for obj in bpy.data.objects:
+    if obj.type == 'MESH' and obj.data.shape_keys:
+        print(f'WARNING: dropped shape keys from {obj.name}: '
+              + ', '.join(k.name for k in obj.data.shape_keys.key_blocks[1:]))
+        obj.shape_key_clear()
 select(PAL, RIG_NAME)
 bpy.ops.wm.usd_export(filepath=str(DEST / f'{PAL}.usdz'), export_animation=False,
                       export_materials=True, generate_preview_surface=True,

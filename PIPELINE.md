@@ -73,7 +73,7 @@ Also skim the output for the size line (`game … -> shown …`), `rejected` str
 - **Exclusions:** additive clips (Hit), the Carrying clip (a flop onto the side), and the rare clip whose pose alone is still 1.6× past a limit after fitting.
 - **Speed:** see problem 8 below.
 
-**Overrides:** hand fixes go in `overrides/<pal>.json`, merged over the generated config: dicts merge, lists replace, and `exclude` accumulates. `allowLarge` keeps clips the bounds check would drop. A fully hand-made `work/<pal>/clip-config.json` also works: the generator keeps any config it didn't write.
+**Overrides:** hand fixes go in `overrides/<pal>.json`, merged over the generated config: dicts merge, lists replace, `exclude` accumulates, and `null` removes a key (`"locomotion": {"Sprint": null}` drops a gait). `allowLarge` keeps clips the bounds check would drop. A fully hand-made `work/<pal>/clip-config.json` also works: the generator keeps any config it didn't write.
 
 ## Problems met, and their fixes
 

@@ -5,7 +5,7 @@
 Inputs: work/<pal>/probe.json (scripts/probe_pal.py), the pal's blueprint
 mesh scale (read with the converter's --inspect mode), the paldeck name, and the
 optional hand-made overrides in overrides/<pal>.json, which are merged last
-(dicts merge, lists replace, except `exclude`, which accumulates).
+(dicts merge, lists replace, except `exclude`, which accumulates; null removes a key).
 
 The rules (see PIPELINE.md):
 - Idle and RestNN face the viewer; everything else turns to a directional view.
@@ -37,6 +37,8 @@ def merge(base, extra):
     for key, value in extra.items():
         if key == 'exclude' and isinstance(value, list):
             base[key] = sorted(set(base.get(key, [])) | set(value))
+        elif value is None:
+            base.pop(key, None)
         elif isinstance(value, dict) and isinstance(base.get(key), dict):
             merge(base[key], value)
         else:

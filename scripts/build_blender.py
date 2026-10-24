@@ -186,6 +186,11 @@ for action in list(bpy.data.actions):
     prefix = f'AS_{ANIMS}_'
     if not action.name.lower().startswith(prefix.lower()):
         continue
+    # Curve-only assets (AS_LeafMomonga_Walk_Curves) import with no bone channels at all.
+    if not action.slots:
+        action_report[:] = [entry for entry in action_report if entry['name'] != action.name]
+        bpy.data.actions.remove(action)
+        continue
     short = action.name[len(prefix):]
     canonical = next((c for c in CANONICAL if c.lower() == short.lower()), None)
     if canonical and canonical != short and prefix + canonical not in bpy.data.actions:

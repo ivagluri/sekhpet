@@ -7,7 +7,7 @@ A macOS menu-bar app that puts 3D desktop pets on your screen, plus a pipeline t
   <img src="docs/demo2.gif" alt="SekhPet demo: a pal over app windows" width="400">
 </p>
 
-Pets idle, wander along the bottom of the screen, play their game animations as random "surprises", watch your cursor, and react when you click, double-click or drag them. Several can be out at once, each at its in-game relative size.
+Pets idle, wander along the bottom of the screen, play their game animations as random "surprises", watch your cursor, and react when you click, double-click or drag them. Up to eight can be out at once, each at its in-game relative size.
 
 **No game assets are included.** This repository is only the engine and the conversion tools. To make pets you need your own installed copy of Palworld, and the packs you make are built from the game's assets, so keep them to yourself. Not affiliated with or endorsed by Pocketpair.
 

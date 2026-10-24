@@ -220,7 +220,7 @@ struct PetPickerView: View {
                     Image(systemName: "folder")
                 }
                 .help("Open Pets Folder (\(PetLibrary.folder.path))")
-                Text("\(model.enabled.count) of \(model.packs.count) on the desktop")
+                Text("\(model.enabled.count) of \(model.packs.count) on the desktop (up to \(PetLibrary.maxOut))")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 Button("None") { for pack in filtered where model.enabled.contains(pack.name) { model.toggle(pack.name, on: false) } }

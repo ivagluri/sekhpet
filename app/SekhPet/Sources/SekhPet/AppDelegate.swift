@@ -37,7 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.setEnabled = { [unowned self] name, on in setEnabled(name, on) }
         picker.trash = { [unowned self] in trash($0) }
         picker.rescan = { [unowned self] in rescan() }
-        for pack in packs where enabled.contains(pack.name) { place(pack) }
+        for pack in packs.filter({ enabled.contains($0.name) }).prefix(PetLibrary.maxOut) { place(pack) }
         menu = StatusMenu(pets: { [unowned self] in pets }, actions: menuActions())
         // With nothing installed, start where pets get added.
         if packs.isEmpty { showPicker() }
@@ -135,7 +135,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setEnabled(_ name: String, _ on: Bool) {
-        if on, !pets.contains(where: { $0.name == name }), let pack = packs.first(where: { $0.name == name }) {
+        if on, !pets.contains(where: { $0.name == name }), pets.count >= PetLibrary.maxOut {
+            tellAboutCap()
+        } else if on, !pets.contains(where: { $0.name == name }), let pack = packs.first(where: { $0.name == name }) {
             place(pack)
         } else if !on, let index = pets.firstIndex(where: { $0.name == name }) {
             house?.remove(pets[index])
@@ -144,6 +146,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let names = pets.map(\.name)
         UserDefaults.standard.set(names, forKey: Defaults.enabled)
         picker.refresh(enabled: Set(names))
+    }
+
+    private var capAlertShowing = false
+
+    /// Once, however many pets were refused at a time (the Pets window's All button asks for each).
+    private func tellAboutCap() {
+        guard !capAlertShowing else { return }
+        capAlertShowing = true
+        DispatchQueue.main.async { [self] in
+            let alert = NSAlert()
+            alert.messageText = "Up to \(PetLibrary.maxOut) pets can be out at once"
+            alert.informativeText = "Each pet out takes memory and drawing time. Put one away to bring out another."
+            alert.runModal()
+            capAlertShowing = false
+        }
     }
 
     private func place(_ pack: PetPack) {

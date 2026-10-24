@@ -4,6 +4,10 @@ import Foundation
 /// one pack folder per pet. The app ships without pets; packs are installed by
 /// dropping them into this folder (or with `scripts/build_app.sh --pets`).
 enum PetLibrary {
+    /// The most pets out at once. Each one costs a window for the window server to blend,
+    /// a SceneKit view, and its animations in memory (~200 MB for a big pal).
+    static let maxOut = 8
+
     static var folder: URL {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return support.appendingPathComponent("SekhPet/Pets", isDirectory: true)

@@ -28,6 +28,7 @@ To share one, zip the folder (or use **Export as Zip…** in the Pets window). *
 {
   "name": "KingWhale",              // unique id; the pets folder uses it lowercased
   "displayName": "Panthalus",
+  "paldeckNo": "203",               // the game's paldeck number, with a letter for variants (005B); the Pet Viewer sorts by it
   "meshScale": 0.0869,              // on-screen scale; standing height × meshScale = metres shown
   "model": "KingWhale.usdz",
   "skeletonNode": "SK_KingWhale",
@@ -72,4 +73,4 @@ What the app does with it:
 - **Groups** never cut off mid-way: interrupting one plays its end clips first.
 - Clip names are free-form. Only the names listed in this file matter.
 
-Optional fields can be left out: `displayName` (defaults to `name`), `meshScale` (1), `lookBones`, `rootTravel`, `groundSpeed`, `loopCount`, `maxSeconds`, and the `input` reactions. The pipeline also writes a few informational fields (`motionFit`, `pelvisLiftScale`, `coordinateSystem`) that the app ignores.
+Optional fields can be left out: `displayName` (defaults to `name`), `paldeckNo`, `meshScale` (1), `lookBones`, `rootTravel`, `groundSpeed`, `loopCount`, `maxSeconds`, and the `input` reactions. The pipeline also writes a few informational fields (`motionFit`, `pelvisLiftScale`, `coordinateSystem`) that the app ignores.

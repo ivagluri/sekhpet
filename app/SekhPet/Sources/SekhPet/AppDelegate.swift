@@ -27,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var wander = UserDefaults.standard.object(forKey: Defaults.wander) as? Bool ?? true
     private var relaunching = false
     private var house: PetHouse?
+    private var viewer: PetViewerWindow?
     private var size = PetSize(rawValue: UserDefaults.standard.string(forKey: Defaults.size) ?? "") ?? .medium
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -53,6 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let now = CACurrentMediaTime()
         for pet in pets { pet.frame(at: now) }
         house?.frame(at: now)
+        viewer?.frame(at: now)
     }
 
     // MARK: Pet House
@@ -290,6 +292,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             powerSaving: { [unowned self] in powerSaving },
             choosePets: { [unowned self] in showPicker() },
             toggleHouse: { [unowned self] in setHouse(house == nil) },
+            showViewer: { [unowned self] in
+                if viewer == nil { viewer = PetViewerWindow() }
+                viewer?.show(packs: packs)
+            },
             isHouseOpen: { [unowned self] in house != nil },
             resetToDefaults: { [unowned self] in resetToDefaults() },
             removePet: { [unowned self] in setEnabled($0, false) },

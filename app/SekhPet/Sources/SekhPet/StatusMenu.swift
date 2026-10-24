@@ -68,6 +68,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         var powerSaving: () -> PowerSaving
         var choosePets: () -> Void
         var toggleHouse: () -> Void
+        var showViewer: () -> Void
         var isHouseOpen: () -> Bool
         var resetToDefaults: () -> Void
         var removePet: (String) -> Void
@@ -104,6 +105,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let house = entry("Pet House", "") { [actions] in actions.toggleHouse() }
         house.state = actions.isHouseOpen() ? .on : .off
         menu.addItem(house)
+        menu.addItem(entry("Pet Viewer…", "") { [actions] in actions.showViewer() })
         menu.addItem(.separator())
         menu.addItem(entry(actions.isPaused() ? "Resume All" : "Pause All", "p") { [actions] in actions.togglePaused() })
         let wander = entry("Wander", "") { [actions] in actions.toggleWander() }

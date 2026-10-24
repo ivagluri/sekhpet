@@ -81,6 +81,8 @@ struct Catalog: Decodable {
 
     let name: String
     let displayName: String
+    /// The game's paldeck number as it shows it ("002", or "005B" for a variant).
+    let paldeckNo: String?
     /// The game's own scale for this character's mesh, applied on screen so
     /// several pets keep their in-game relative sizes.
     let meshScale: Double
@@ -108,6 +110,7 @@ struct Catalog: Decodable {
         model = try c.decode(String.self, forKey: .model)
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? (model as NSString).deletingPathExtension
         displayName = try c.decodeIfPresent(String.self, forKey: .displayName) ?? name
+        paldeckNo = try c.decodeIfPresent(String.self, forKey: .paldeckNo)
         meshScale = try c.decodeIfPresent(Double.self, forKey: .meshScale) ?? 1
         lookBones = try c.decodeIfPresent([String].self, forKey: .lookBones)
         skeletonNode = try c.decode(String.self, forKey: .skeletonNode)
@@ -122,7 +125,7 @@ struct Catalog: Decodable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case name, displayName, meshScale, lookBones, model, skeletonNode, clips, groups, idleClip, surprise, surprisePool, locomotion, wander, input
+        case name, displayName, paldeckNo, meshScale, lookBones, model, skeletonNode, clips, groups, idleClip, surprise, surprisePool, locomotion, wander, input
     }
 
     /// The clips a pool entry plays (a group's members in order).

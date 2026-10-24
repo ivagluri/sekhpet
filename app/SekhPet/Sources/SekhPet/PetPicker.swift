@@ -8,6 +8,7 @@ struct PetPack: Identifiable {
     let directory: URL
     let name: String
     let displayName: String
+    let paldeckNo: String?
     /// On-screen standing height in metres, after the game's mesh scale.
     let height: Double
     let clipCount: Int
@@ -20,6 +21,7 @@ struct PetPack: Identifiable {
         self.directory = directory
         name = catalog.name
         displayName = catalog.displayName
+        paldeckNo = catalog.paldeckNo
         height = catalog.clip(catalog.idleClip).bounds.max[1] * catalog.meshScale
         clipCount = catalog.clips.count
         thumbnail = NSImage(contentsOf: directory.appendingPathComponent("thumbnail.png"))

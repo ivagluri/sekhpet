@@ -492,6 +492,7 @@ pool += [{'clip': name} for name in sorted(clips) if name not in reserved and na
 catalog = {
     'name': PAL,
     'displayName': CONFIG.get('displayName', PAL),
+    'paldeckNo': CONFIG.get('paldeckNo'),
     'meshScale': CONFIG.get('meshScale', 1.0),
     'lookBones': CONFIG.get('lookBones'),  # neck/head bones for cursor watching; None auto-detects
     'model': f'{PAL}.usdz',

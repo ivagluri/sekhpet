@@ -96,6 +96,8 @@ final class PetController {
             updatePerch(at: now, canFall: false)
             return
         }
+        // On a window of an app where Claude Code is working (a terminal), the pet works too.
+        engine.work = perch != nil && ClaudeWatch.shared.hosts.contains(perchOwner) ? catalog.workClip : nil
         engine.tick()
         stage.rig.motion.update(at: now)
         let moving = stage.rig.motion.isMoving && !stage.rig.motion.isPinned
@@ -116,6 +118,7 @@ final class PetController {
     /// Hands the pet's body to the Pet House, standing still at neutral depth.
     func enterHouse() -> SCNNode {
         housed = true
+        engine.work = nil
         perch = nil
         fall = nil
         jump = nil
@@ -178,6 +181,7 @@ final class PetController {
     }
     private var perchFrame = NSRect.zero
     private var perchLayer = 0
+    private var perchOwner: pid_t = 0
     /// Until then, window changes come from Mission Control or Show Desktop.
     private var overviewUntil: TimeInterval = 0
     /// The window the pet just stepped off, possibly still shrinking away: never a landing spot.
@@ -202,6 +206,7 @@ final class PetController {
         perch = best.window?.window
         perchFrame = best.window?.frame ?? .zero
         perchLayer = best.window?.layer ?? 0
+        perchOwner = best.window?.owner ?? 0
         if perch != nil { stage.rig.actor.setDepth(0, over: 0.3) }
         panel.setFrameOrigin(NSPoint(x: panel.frame.minX, y: best.top - floorInWindow))
         return true

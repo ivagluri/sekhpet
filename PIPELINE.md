@@ -63,6 +63,7 @@ Also skim the output for the size line (`game … -> shown …`), `rejected` str
   - Falls and holds (`UpLoop`, `DownLoop`) loop 1–2 times and `Skill_*` loops 3–6 times. Other loops repeat until the surprise lasts at least 6 s.
   - The exporter warns about a clip ending in Start/Loop/End that isn't in a group.
 - **Travel:** Walk, Trot, Transport, Run, Sprint, Walk_Swim and Run_Swim become wandering gaits.
+- **Work:** the clips the blueprint's `ActionMontageMap` plays for work (CommonWork, Architecture, Mining, Deforest, Watering, Feeding, Cooking, Cool) loop, as their montages do in the game, so repeats wrap without a crossfade hitch. A clip the map also uses for something else (one pal's CommonWork is its Eat) stays a one-shot. Variants inherit the map from a base blueprint that isn't extracted, so for them the usual names (CommonWork, Architecture, Mining, Deforest, Watering, Planting, Cooking, Cooling) stand in.
 - **Root travel:** clips whose root bone travels more than 0.3 m are stripped in place and replayed by moving the window, scaled to at most 1.5 m.
 - **Pelvis launches:** a lift above max(1 m, half the pal's height) is capped at 0.4 × height. `Getup*` clips with a big lift are excluded instead (capping them sinks the body into the floor).
 - **Reactions:** click plays Petting (87%) or Damage (13%). Double-click plays the first standalone `Skill_*` clip of 0.8–4 s, otherwise Encount. Dragging holds the Jump group's loop and letting go plays its landing.

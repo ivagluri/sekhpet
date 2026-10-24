@@ -9,6 +9,8 @@ enum DesktopSurfaces {
         let frame: NSRect
         /// Window level: 0 for ordinary windows, higher for always-on-top ones.
         let layer: Int
+        /// The app that owns the window.
+        let owner: pid_t
     }
 
     /// On-screen windows of other apps, front to back: normal windows and always-on-top
@@ -22,14 +24,14 @@ enum DesktopSurfaces {
         return list.compactMap { info in
             guard let layer = info[kCGWindowLayer as String] as? Int,
                   (0...Int(CGWindowLevelForKey(.floatingWindow))).contains(layer),
-                  (info[kCGWindowOwnerPID as String] as? pid_t) != ownPID,
+                  let owner = info[kCGWindowOwnerPID as String] as? pid_t, owner != ownPID,
                   (info[kCGWindowAlpha as String] as? Double ?? 1) > 0,
                   let number = info[kCGWindowNumber as String] as? CGWindowID,
                   let dict = info[kCGWindowBounds as String] as? NSDictionary,
                   let bounds = CGRect(dictionaryRepresentation: dict),
                   bounds.width >= 120, bounds.height >= 40 else { return nil }
             let frame = NSRect(x: bounds.minX, y: flipHeight - bounds.maxY, width: bounds.width, height: bounds.height)
-            return Surface(window: number, frame: frame, layer: layer)
+            return Surface(window: number, frame: frame, layer: layer, owner: owner)
         }
     }
 
@@ -61,7 +63,8 @@ enum DesktopSurfaces {
                   let dict = info[kCGWindowBounds as String] as? NSDictionary,
                   let bounds = CGRect(dictionaryRepresentation: dict) else { continue }
             let frame = NSRect(x: bounds.minX, y: flipHeight - bounds.maxY, width: bounds.width, height: bounds.height)
-            windows[number] = (place, Surface(window: number, frame: frame, layer: layer))
+            let owner = info[kCGWindowOwnerPID as String] as? pid_t ?? 0
+            windows[number] = (place, Surface(window: number, frame: frame, layer: layer, owner: owner))
             if layer >= dockLevel, (info[kCGWindowOwnerName as String] as? String) == "Dock",
                screens.contains("\(Int(bounds.width))x\(Int(bounds.height))") {
                 missionControl = true

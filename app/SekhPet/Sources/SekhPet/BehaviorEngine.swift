@@ -140,6 +140,14 @@ final class BehaviorEngine {
         didSet { scheduleSurprise(from: clock()) }
     }
     var onChange: ((String) -> Void)?
+    /// While set, the pet works: this clip replaces the baseline, without surprises.
+    /// Reactions still play, then hand back to it.
+    var work: String? {
+        didSet {
+            guard work != oldValue, currentIsBaseline || current == nil else { return }
+            settle()
+        }
+    }
 
     init(rig: PetRig, clock: @escaping () -> TimeInterval) {
         self.rig = rig
@@ -175,7 +183,7 @@ final class BehaviorEngine {
             } else {
                 start(baseline(), baseline: true, at: now)
             }
-        } else if mode == .random, currentIsBaseline, now >= nextSurprise {
+        } else if mode == .random, work == nil, currentIsBaseline, now >= nextSurprise {
             perform(surprise(), at: now)
         }
     }
@@ -341,6 +349,9 @@ final class BehaviorEngine {
     }
 
     private func baseline() -> ClipSequence {
+        if let work {
+            return .single(work, loops: rig.catalog.clip(work).loop ? nil : 1, side: rig.preferredSide(for: work))
+        }
         switch mode {
         case .random:
             return .single(rig.catalog.idleClip, loops: nil, side: 1)

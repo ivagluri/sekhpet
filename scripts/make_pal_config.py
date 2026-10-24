@@ -11,6 +11,7 @@ The rules (see PIPELINE.md):
 - Idle and RestNN face the viewer; everything else turns to a directional view.
 - Start/StartLoop/Action/UpLoop/ActionLoop/Loop/DownLoop/End clips are grouped by stem.
 - Walk/Trot/Transport/Run/Sprint (+ swim gaits) become wander travel.
+- Work clips (the blueprint's work actions: CommonWork, Mining, Deforest...) loop.
 - Clips with large planar root travel are stripped and replayed (scaled to <= 1.5 m).
 - A large pelvis launch is capped; a get-up that starts high in the air is excluded.
 - Additive clips (Hit) are excluded.
@@ -66,6 +67,30 @@ def blueprint_scale(pal, anims):
             if scale:
                 return float(scale['X']), f'BP_{pal} CharacterMesh0 RelativeScale3D'
     return 1.0, f'BP_{pal} leaves the mesh at 1.0'
+
+
+# The game's work actions; their montages repeat for as long as the pal works.
+WORK_ACTIONS = {'CommonWork', 'Architecture', 'Mining', 'Deforest', 'Watering', 'Feeding', 'Cooking', 'Cool'}
+WORK_CLIPS = {'CommonWork', 'Architecture', 'Mining', 'Deforest', 'Watering', 'Planting', 'Cooking', 'Cooling'}
+
+
+def work_clips(pal, names):
+    """Clips the blueprint's ActionMontageMap (in the blueprint.json that
+    blueprint_scale wrote) plays for work, minus any it also plays for something else.
+    A variant inherits its map from a base blueprint that isn't extracted, so without
+    one the usual work clip names stand in."""
+    path = ROOT / 'work' / pal.lower() / 'blueprint.json'
+    exports = next(iter(json.loads(path.read_text()).values())) if path.exists() else []
+    if not any('ActionMontageMap' in export.get('Properties', {}) for export in exports):
+        return WORK_CLIPS & names
+    work, other = set(), set()
+    for export in exports:
+        for entry in export.get('Properties', {}).get('ActionMontageMap', []):
+            montage = (entry['Value'] or {}).get('ObjectName') or ''
+            clip = max((n for n in names if montage.endswith(f"_{n}'")), key=len, default=None)
+            if clip:
+                (work if entry['Key'].split('::')[-1] in WORK_ACTIONS else other).add(clip)
+    return work - other
 
 
 def split_parts(name):
@@ -151,6 +176,7 @@ def main():
 
     groups = find_groups(names)
     grouped = {c for g in groups.values() for c in g['start'] + [g['loop']] + g['end']}
+    working = work_clips(pal, names)
     settings = {}
     for name in sorted(names):
         clip = {}
@@ -166,6 +192,8 @@ def main():
                 clip['fadeIn'] = 0.1
             if name == 'JumpLoop':
                 clip['fadeIn'] = 0.15
+        elif name in working:
+            clip = {'loop': True}
         elif name == 'Damage':
             clip = {'fadeIn': 0.15}
         elif name == 'Petting':

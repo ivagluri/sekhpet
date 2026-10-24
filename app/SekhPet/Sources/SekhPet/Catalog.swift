@@ -138,7 +138,7 @@ struct Catalog: Decodable {
     /// Every clip the pet can play: idle, surprises and input reactions.
     var playableClips: [String] {
         var names = [idleClip] + [input.doubleClick].compactMap { $0 } + input.singleClick.map(\.clip)
-        names += surprisePool.flatMap { clips(for: $0) } + locomotion.map(\.clip)
+        names += surprisePool.flatMap { clips(for: $0) } + locomotion.map(\.clip) + [workClip].compactMap { $0 }
         for group in [input.dragGroup, input.dropGroup].compactMap({ $0 }) {
             names += clips(for: PoolEntry(clip: nil, group: group))
         }
@@ -147,6 +147,13 @@ struct Catalog: Decodable {
     }
 
     func isLocomotion(_ name: String) -> Bool { locomotion.contains { $0.clip == name } }
+
+    /// The clip the pet works with: handiwork, or else its first other work action
+    /// (the game's work montages, as named in the packs).
+    var workClip: String? {
+        ["CommonWork", "Commonwork", "Architecture", "Mining", "Deforest", "Watering", "Planting", "Cooking", "Cooling"]
+            .first { clips[$0] != nil }
+    }
 
     func clip(_ name: String) -> Clip {
         guard let clip = clips[name] else { fatalError("clips.json has no clip named \(name)") }

@@ -42,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // With nothing installed, start where pets get added.
         if packs.isEmpty { showPicker() }
         observeSystem()
+        ClaudeWatch.shared.start()
         if UserDefaults.standard.bool(forKey: Defaults.house) { setHouse(true) }
 
         // Behavior and window movement run on the display's refresh, so walking is smooth.

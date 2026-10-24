@@ -55,6 +55,18 @@ Building one pal takes about a minute, more for large ones. Review `work/<pal>/c
   - Drag the box to move it, or the arrow on its front corner (shown when the mouse is over the box) to resize it. Like a pet, it stands on window tops, rides along when the window moves, falls when it closes, and jumps back on when it returns.
   - Switching it off sends the pets back to where they were on the desktop.
 - **Pet Viewer** (Pet Viewer…): a loadout-screen style window for any installed pet, listed by paldeck number. Drag to turn and tilt, scroll or pinch to zoom, middle-drag to move up and down, and click or double-click the pet. Its card shows height, animation count and top speed; its animation list plays any animation once, or on a loop. A turntable slowly circles the pet until you grab the camera.
+- **Working with Claude Code** (optional): a pet standing on a window of the app where [Claude Code](https://claude.com/claude-code) is working, a terminal say, plays its work animation (handiwork, or its first other work action) until Claude finishes or waits on you. Claude Code tells the app through hooks; add these to `~/.claude/settings.json`:
+
+  ```json
+  "hooks": {
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "timeout": 5, "command": "d=\"$HOME/Library/Application Support/SekhPet/Claude\"; mkdir -p \"$d\" && echo working > \"$d/.$PPID\" && mv -f \"$d/.$PPID\" \"$d/$PPID\"" }] }],
+    "Stop":             [{ "hooks": [{ "type": "command", "timeout": 5, "command": "d=\"$HOME/Library/Application Support/SekhPet/Claude\"; mkdir -p \"$d\" && echo idle > \"$d/.$PPID\" && mv -f \"$d/.$PPID\" \"$d/$PPID\"" }] }],
+    "Notification":     [{ "hooks": [{ "type": "command", "timeout": 5, "command": "d=\"$HOME/Library/Application Support/SekhPet/Claude\"; mkdir -p \"$d\" && echo idle > \"$d/.$PPID\" && mv -f \"$d/.$PPID\" \"$d/$PPID\"" }] }],
+    "SessionEnd":       [{ "hooks": [{ "type": "command", "timeout": 5, "command": "d=\"$HOME/Library/Application Support/SekhPet/Claude\"; rm -f \"$d/$PPID\"" }] }]
+  }
+  ```
+
+  Each session writes one small file named for its `claude` process; the app watches that folder and reads nothing else. Every pet on any window of that app works, since windows and tabs of one app can't be told apart. Sessions inside tmux or screen don't count: they run under the tmux server, not the terminal app.
 - **Pets window** (Choose Pets…): switch pets on and off, **Add Pet…** from a zip (or drop zips on the window), and **Export as Zip…** from a pet's ••• menu to move it to another Mac.
 - **Low Power** draws at 20 fps without anti-aliasing. Automatic turns it on when running on battery or in macOS Low Power Mode.
 

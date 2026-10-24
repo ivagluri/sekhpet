@@ -363,13 +363,16 @@ final class PetController {
         lastOnScreenCheck = now
         let frame = panel.frame
         let feet = NSPoint(x: frame.midX, y: frame.minY + floorInWindow)
-        guard !NSScreen.screens.contains(where: { $0.frame.contains(feet) }),
+        // A point of slack: with the Dock hidden, pets stand on the screen's very bottom edge,
+        // and rounding can leave the feet a hair below it.
+        guard !NSScreen.screens.contains(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(feet) }),
               let screen = NSScreen.screens.min(by: { abs($0.frame.midX - feet.x) < abs($1.frame.midX - feet.x) })
         else { return }
         perch = nil
         fall = nil
         let visible = screen.visibleFrame
-        let x = min(max(frame.minX, visible.minX), visible.maxX - frame.width)
+        // The body back on screen, not the whole window: that's much wider, for the widest clip.
+        let x = min(max(frame.midX, visible.minX), visible.maxX) - frame.width / 2
         panel.setFrameOrigin(NSPoint(x: x, y: visible.minY - floorInWindow))
         saveOrigin()
     }

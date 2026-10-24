@@ -348,6 +348,19 @@ def unzero_scales(action):
             fcurve.update()
 
 
+def hold_scales(action):
+    """Drops a clip's scale animation, leaving every bone at its first frame's scale. For clips
+    listed in `staticScale`: SceneKit doesn't crossfade out of some clips with time-sampled
+    scale (Sekhmet's Sprint): the pet snaps to the next clip instead."""
+    bag = anim_utils.action_get_channelbag_for_slot(action, action.slots[0])
+    for fcurve in bag.fcurves:
+        if fcurve.data_path.endswith('.scale') and len(fcurve.keyframe_points) > 1:
+            first = fcurve.keyframe_points[0].co.y
+            for key in fcurve.keyframe_points:
+                key.co.y = key.handle_left.y = key.handle_right.y = first
+            fcurve.update()
+
+
 def measure_bounds(action):
     use_action(action)
     lo = Vector((math.inf,) * 3)
@@ -436,6 +449,11 @@ for action in sorted(bpy.data.actions, key=lambda a: a.name):
             exported = fitted
 
     unzero_scales(exported)
+    if name in CONFIG.get('staticScale', []):
+        if exported is action:
+            exported = action.copy()
+            exported.name = action.name + '_InPlace'
+        hold_scales(exported)
     use_action(exported)
     scene.frame_start = 1
     scene.frame_end = last_frame(exported)

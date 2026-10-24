@@ -95,6 +95,9 @@ Also skim the output for the size line (`game … -> shown …`), `rejected` str
 | 12 | A giant pal (Panthalus, 27 m) ran the test out of memory, or its nose and tail were clipped | Sizes in model metres without `meshScale`; a fixed camera depth | Automatic: test frames use `meshScale` and are capped at 2048 px; the camera's depth range comes from the pal's reach |
 | 13 | High memory with several pets out | 2048 px game textures | Automatic: textures above 1024 px are scaled down at export |
 | 14 | A paldeck pal has no model folder | Its blueprint uses a differently named mesh | Manual: see below |
+| 15 | Build fails in the probe: `index 0 out of range` | A curve-only animation (`AS_LeafMomonga_Walk_Curves`) has no bone channels | Automatic: dropped on import |
+| 16 | The pal is invisible: every test frame is empty | The mesh has shape keys; SceneKit draws nothing of a skinned mesh exported with blend shapes | Automatic: shape keys dropped before export (printed as a `WARNING`) |
+| 17 | No crossfade out of some clip: the pal snaps to the next one (Sekhmet after Sprint). In the check sheet it shows as the pal staying in that clip's pose (LeafMomonga flat after a drop) | SceneKit mishandles crossfading out of some clips with time-sampled bone scale; the offline renderer behind the check frames freezes instead of snapping. Not every such clip: 510 of 1308 have sampled scale, and most blend fine | Manual: list the clips in `staticScale` in overrides, which holds their scale at the first frame's |
 
 ### No model folder
 

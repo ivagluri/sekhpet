@@ -182,7 +182,7 @@ final class PetController {
     private var perchFrame = NSRect.zero
     private var perchLayer = 0
     private var perchOwner: pid_t = 0
-    /// Until then, window changes come from Mission Control or Show Desktop.
+    /// Until then, window changes come from Mission Control, Show Desktop or the screens waking.
     private var overviewUntil: TimeInterval = 0
     /// The window the pet just stepped off, possibly still shrinking away: never a landing spot.
     private var leftWindow: CGWindowID?
@@ -262,7 +262,11 @@ final class PetController {
             panel.setFrameOrigin(NSPoint(x: panel.frame.minX, y: y))
             if y <= fall.toY {
                 self.fall = nil
-                snapToSurface(within: 4)
+                // What it was falling to may have moved away meanwhile: keep falling.
+                if !snapToSurface(within: 4) {
+                    startFall(at: now)
+                    if self.fall != nil { return }
+                }
                 engine.dragEnded()  // the landing
                 saveOrigin()
             }
@@ -364,7 +368,8 @@ final class PetController {
     /// Safety net: a pet whose feet are on no screen (whatever put it there) drops back
     /// in at the nearest screen's bottom edge.
     private func returnIfOffScreen(at now: TimeInterval) {
-        guard now - lastOnScreenCheck >= 1, !sceneView.isDragging else { return }
+        // Not while the screens wake, when they can be briefly missing from the list.
+        guard now - lastOnScreenCheck >= 1, now >= overviewUntil, !sceneView.isDragging else { return }
         lastOnScreenCheck = now
         let frame = panel.frame
         let feet = NSPoint(x: frame.midX, y: frame.minY + floorInWindow)
@@ -426,8 +431,9 @@ final class PetController {
         panel.setFrameOrigin(NSPoint(x: x, y: y))
         if t >= 1 {
             self.jump = nil
-            snapToSurface(within: 4)
+            let landed = snapToSurface(within: 4)
             engine.jumpEnded()
+            if !landed { startFall(at: now) }
             saveOrigin()
         }
         return true
@@ -435,7 +441,7 @@ final class PetController {
 
     /// Drops to the highest window top below the pet's feet, or the screen bottom.
     private func startFall(at now: TimeInterval) {
-        leftWindow = perch
+        if perch != nil { leftWindow = perch }
         perch = nil
         let frame = panel.frame
         let feet = frame.minY + floorInWindow
@@ -591,6 +597,8 @@ final class PetController {
 
     func setPaused(_ paused: Bool, _ reason: PauseReason) {
         if paused { pauseReasons.insert(reason) } else { pauseReasons.remove(reason) }
+        // Waking the screens zooms every window out and back in, like Mission Control: ride it.
+        if reason == .screensAsleep { overviewUntil = CACurrentMediaTime() + 2 }
         let shouldPause = !pauseReasons.isEmpty
         guard shouldPause != engine.isPaused else { return }
         stage.scene.isPaused = shouldPause

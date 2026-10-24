@@ -37,7 +37,8 @@ final class ClaudeWatch {
                 continue
             }
             let state = (try? String(contentsOf: file, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines)
-            if state == "working" { hosts.formUnion(Self.ancestors(of: pid)) }
+            // A session suspended mid-turn (Ctrl-Z) still says working, but isn't.
+            if state == "working", Self.process(pid).map { Int32($0.kp_proc.p_stat) } != SSTOP { hosts.formUnion(Self.ancestors(of: pid)) }
         }
         self.hosts = hosts
         // While anything works, look again now and then in case its session dies mid-turn.
@@ -56,12 +57,17 @@ final class ClaudeWatch {
         var current = pid
         while current > 1, chain.count < 32 {
             chain.append(current)
-            var info = kinfo_proc()
-            var size = MemoryLayout<kinfo_proc>.stride
-            var mib = [CTL_KERN, KERN_PROC, KERN_PROC_PID, current]
-            guard sysctl(&mib, 4, &info, &size, nil, 0) == 0, size > 0 else { break }
+            guard let info = process(current) else { break }
             current = info.kp_eproc.e_ppid
         }
         return chain
+    }
+
+    private static func process(_ pid: pid_t) -> kinfo_proc? {
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var mib = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        guard sysctl(&mib, 4, &info, &size, nil, 0) == 0, size > 0 else { return nil }
+        return info
     }
 }

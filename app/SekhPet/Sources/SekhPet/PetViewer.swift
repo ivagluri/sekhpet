@@ -28,6 +28,7 @@ struct ViewerAnimation: Identifiable, Hashable {
             list.append(ViewerAnimation(title: title(entry.name), section: section, entry: entry))
         }
         add(.init(clip: catalog.idleClip, group: nil), .moves)
+        for clip in catalog.idleVariants { add(.init(clip: clip, group: nil), .moves) }
         for gait in catalog.locomotion { add(.init(clip: gait.clip, group: nil), .moves) }
         let actions = catalog.surprisePool.sorted { title($0.name) < title($1.name) }
         for entry in actions { add(entry, .actions) }

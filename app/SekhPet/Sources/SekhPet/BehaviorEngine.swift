@@ -108,7 +108,8 @@ final class ClipSequence {
     }
 }
 
-/// Picks what the pet does next. By default the idle clip loops, and at random
+/// Picks what the pet does next. By default the idle clip loops (drifting into one of
+/// the pack's idle variants now and then, if it has any), and at random
 /// intervals one surprise (any non-input clip or group) plays before returning
 /// to idle. In loop mode the selected entry repeats instead, with no surprises.
 /// Input reactions interrupt either, then hand back to the baseline.
@@ -126,6 +127,7 @@ final class BehaviorEngine {
     private var currentIsBaseline = false
     private var nextSurprise = TimeInterval.infinity
     private var lastSurprise: Catalog.PoolEntry?
+    private var lastVariant: String?
     private var pausedAt: TimeInterval?
     /// Watch Cursor Now in loop mode tracks the cursor on top of the loop until then.
     private var watchOverlayUntil: TimeInterval = 0
@@ -254,20 +256,31 @@ final class BehaviorEngine {
 
     /// The landing: the jump group's end (JumpEnd).
     func jumpEnded() {
-        guard rig.catalog.input.dropGroup != nil else { return dragEnded() }
-        current?.release(on: rig, at: clock())
+        guard let group = rig.catalog.input.dropGroup else { return dragEnded() }
+        releaseHeld(group)
     }
 
     func dragEnded() {
         let input = rig.catalog.input
         if let group = input.dropGroup, group == input.dragGroup {
             // Held in the group's loop (e.g. JumpLoop); letting go plays its end (JumpEnd).
-            current?.release(on: rig, at: clock())
+            releaseHeld(group)
         } else if let group = input.dropGroup {
             perform(.group(group, in: rig.catalog, loops: 1), at: clock())
         } else if rig.catalog.input.dragGroup != nil {
             // Without a landing, end the carry and settle back to the baseline.
             current?.interrupt(on: rig, at: clock())
+        }
+    }
+
+    /// Lets go of `group` held in its loop. If it's still queued behind another group's
+    /// end clips (let go before it got to start), it will now land after one pass instead
+    /// of holding in the air with nothing left to release it.
+    private func releaseHeld(_ group: String) {
+        if let queued = pending, queued.sequence.name == group {
+            pending = (.group(group, in: rig.catalog, loops: 1), queued.baseline)
+        } else {
+            current?.release(on: rig, at: clock())
         }
     }
 
@@ -354,7 +367,18 @@ final class BehaviorEngine {
         }
         switch mode {
         case .random:
-            return .single(rig.catalog.idleClip, loops: nil, side: 1)
+            // With idle variants, plain idle for a spell, then one variant; when that ends
+            // the baseline restarts, which leaves the surprise clock running.
+            let catalog = rig.catalog
+            let others = catalog.idleVariants.filter { $0 != lastVariant }
+            guard let variant = others.randomElement() ?? catalog.idleVariants.first else {
+                return .single(catalog.idleClip, loops: nil, side: 1)
+            }
+            lastVariant = variant
+            let seconds = Double.random(in: Self.idleVariantGap)
+            let loops = max(1, Int((seconds / max(catalog.clip(catalog.idleClip).duration, 0.1)).rounded()))
+            return ClipSequence(name: catalog.idleClip,
+                                steps: [Step(clip: catalog.idleClip, loops: loops), Step(clip: variant, loops: 1)], side: 1)
         case .loop:
             // Non-looping clips replay one pass at a time so each restart crossfades;
             // locomotion keeps wandering back and forth.
@@ -366,6 +390,8 @@ final class BehaviorEngine {
     }
 
     static let watchSeconds: ClosedRange<Double> = 8...15
+    /// Seconds of plain idle before each idle variant.
+    static let idleVariantGap: ClosedRange<Double> = 8...20
 
     /// Idles while following the cursor for 8–15 seconds.
     func watchCursor() -> ClipSequence {

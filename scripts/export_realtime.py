@@ -167,12 +167,18 @@ def squash_motion(action, frames, track, reference, factors):
         return offset * (factors['up'] if offset > 0 else factors['down'])
 
     bag = anim_utils.action_get_channelbag_for_slot(action, action.slots[0])
-    # The root bone's rest matrix is identity, so its location channels are armature X/Y/Z.
+    # Each root location channel moves along its rest axis: armature X/Y/Z for Palworld
+    # roots (identity rest), turned for rigs whose root rest is turned.
+    rest = rig.data.bones['root'].matrix_local.to_3x3()
     for fcurve in bag.fcurves:
         if fcurve.data_path == 'pose.bones["root"].location':
+            direction = rest.col[fcurve.array_index]
             for key in fcurve.keyframe_points:
                 for point in (key.co, key.handle_left, key.handle_right):
-                    point.y = scaled(point.y, fcurve.array_index)
+                    if abs(direction.z) < 0.5:
+                        point.y *= factors['side']
+                    else:
+                        point.y *= factors['up'] if point.y * direction.z > 0 else factors['down']
             fcurve.update()
     use_action(action)
     to_armature = rig.matrix_world.inverted()
@@ -499,10 +505,10 @@ for action in sorted(bpy.data.actions, key=lambda a: a.name):
         bpy.data.actions.remove(exported)
     print(f'exported {name}: {entry["duration"]}s')
 
-# Surprise pool: every clip except the idle clip, input clips and excluded ones.
+# Surprise pool: every clip except the idle clip (and its variants), input clips and excluded ones.
 # Start/loop/end members are represented once, by their group.
 inputs = CONFIG['input']
-reserved = {CONFIG['idleClip'], inputs['doubleClick'], *CONFIG['surprise']['exclude']}
+reserved = {CONFIG['idleClip'], inputs['doubleClick'], *CONFIG['surprise']['exclude'], *CONFIG.get('idleVariants', [])}
 reserved |= {entry['clip'] for entry in inputs['singleClick']}
 reserved |= set(CONFIG['locomotion'])  # reached through the wander behavior instead
 for name in (inputs.get('dragGroup'), inputs.get('dropGroup')):
@@ -526,6 +532,7 @@ catalog = {
     'clips': clips,
     'groups': CONFIG['groups'],
     'idleClip': CONFIG['idleClip'],
+    'idleVariants': CONFIG.get('idleVariants', []),  # played within the idle, not as surprises
     'surprise': {k: v for k, v in CONFIG['surprise'].items() if not k.startswith('_')},
     'surprisePool': pool,
     'locomotion': [{'clip': name, 'weight': v['weight'], 'maxSeconds': v.get('maxSeconds')}

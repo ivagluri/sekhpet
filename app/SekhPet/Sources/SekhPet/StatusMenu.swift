@@ -283,7 +283,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         return submenu("Double-Click Action", menu)
     }
 
-    /// Idle, every surprise, the travel gaits and the input reactions, each running `pick`.
+    /// Idle and its variants, every surprise, the travel gaits and the input reactions, each running `pick`.
     private func animationMenu(_ pet: PetController, selected: Catalog.PoolEntry?,
                                pick: @escaping (Catalog.PoolEntry) -> Void) -> NSMenu {
         let menu = NSMenu()
@@ -294,6 +294,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             menu.addItem(item)
         }
         add(Catalog.PoolEntry(clip: catalog.idleClip, group: nil), catalog.idleClip)
+        for clip in catalog.idleVariants {
+            add(Catalog.PoolEntry(clip: clip, group: nil), clip)
+        }
         menu.addItem(.separator())
         menu.addItem(label("Surprises"))
         for entry in catalog.surprisePool.sorted(by: { $0.name < $1.name }) {

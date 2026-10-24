@@ -93,6 +93,9 @@ struct Catalog: Decodable {
     let clips: [String: Clip]
     let groups: [String: Group]
     let idleClip: String
+    /// Clips the idle drifts into now and then (one at a time, with plain idle between),
+    /// for characters whose idle alone is too still. Not surprises; empty for most packs.
+    let idleVariants: [String]
     let surprise: Surprise
     let surprisePool: [PoolEntry]
     let locomotion: [WeightedClip]
@@ -117,6 +120,7 @@ struct Catalog: Decodable {
         clips = try c.decode([String: Clip].self, forKey: .clips)
         groups = try c.decode([String: Group].self, forKey: .groups)
         idleClip = try c.decode(String.self, forKey: .idleClip)
+        idleVariants = try c.decodeIfPresent([String].self, forKey: .idleVariants) ?? []
         surprise = try c.decode(Surprise.self, forKey: .surprise)
         surprisePool = try c.decode([PoolEntry].self, forKey: .surprisePool)
         locomotion = try c.decode([WeightedClip].self, forKey: .locomotion)
@@ -125,7 +129,7 @@ struct Catalog: Decodable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case name, displayName, paldeckNo, meshScale, lookBones, model, skeletonNode, clips, groups, idleClip, surprise, surprisePool, locomotion, wander, input
+        case name, displayName, paldeckNo, meshScale, lookBones, model, skeletonNode, clips, groups, idleClip, idleVariants, surprise, surprisePool, locomotion, wander, input
     }
 
     /// The clips a pool entry plays (a group's members in order).
@@ -137,7 +141,7 @@ struct Catalog: Decodable {
 
     /// Every clip the pet can play: idle, surprises and input reactions.
     var playableClips: [String] {
-        var names = [idleClip] + [input.doubleClick].compactMap { $0 } + input.singleClick.map(\.clip)
+        var names = [idleClip] + idleVariants + [input.doubleClick].compactMap { $0 } + input.singleClick.map(\.clip)
         names += surprisePool.flatMap { clips(for: $0) } + locomotion.map(\.clip) + [workClip].compactMap { $0 }
         for group in [input.dragGroup, input.dropGroup].compactMap({ $0 }) {
             names += clips(for: PoolEntry(clip: nil, group: group))

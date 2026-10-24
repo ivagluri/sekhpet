@@ -34,6 +34,7 @@ To share one, zip the folder (or use **Export as Zip…** in the Pets window). *
   "skeletonNode": "SK_KingWhale",
   "lookBones": null,                // neck/head bones for cursor watching; null auto-detects neck_01/neck + head
   "idleClip": "Idle",
+  "idleVariants": ["Rest01", "Rest02"], // optional: clips the idle drifts into now and then
   "clips": {
     "Idle": {
       "file": "clips/Idle.usdz",
@@ -67,10 +68,10 @@ To share one, zip the folder (or use **Export as Zip…** in the Pets window). *
 
 What the app does with it:
 
-- **Idle** loops. Every `surprise.intervalSeconds` (a random time in the range; the menu can change it) one entry from `surprisePool` plays, then the pet returns to idle. Looping clips and group loops repeat `loopCount` times, and short surprises repeat until they last `minSeconds`.
+- **Idle** loops. With `idleVariants`, it plays for 8–20 seconds, then one variant (never the same one twice running), then idles again, for characters whose idle alone is too still. The variants aren't surprises: they don't reset the surprise clock. Every `surprise.intervalSeconds` (a random time in the range; the menu can change it) one entry from `surprisePool` plays, then the pet returns to idle. Looping clips and group loops repeat `loopCount` times, and short surprises repeat until they last `minSeconds`.
 - **Wandering** is a share (`wander.chance`) of surprises: a `locomotion` clip picked by `weight`, walked for `wander.seconds` at the clip's `groundSpeed`. `depthChance` is how often a trip also steps into or out of the screen.
 - **Bounds** are the extent of the mesh over the whole clip, in model metres. The app sizes the window from them, and keeps a walking pet's body from crossing a screen edge using them.
 - **Groups** never cut off mid-way: interrupting one plays its end clips first.
 - Clip names are free-form. Only the names listed in this file matter.
 
-Optional fields can be left out: `displayName` (defaults to `name`), `paldeckNo`, `meshScale` (1), `lookBones`, `rootTravel`, `groundSpeed`, `loopCount`, `maxSeconds`, and the `input` reactions. The pipeline also writes a few informational fields (`motionFit`, `pelvisLiftScale`, `coordinateSystem`) that the app ignores.
+Optional fields can be left out: `displayName` (defaults to `name`), `paldeckNo`, `idleVariants`, `meshScale` (1), `lookBones`, `rootTravel`, `groundSpeed`, `loopCount`, `maxSeconds`, and the `input` reactions. The pipeline also writes a few informational fields (`motionFit`, `pelvisLiftScale`, `coordinateSystem`) that the app ignores.

@@ -1157,14 +1157,19 @@ private final class Resident {
         }
     }
 
-    /// A gait picked by the pack's weights, as on the desktop, leaving out any that would
-    /// cover the trip in under a second and a half; the slowest if none is left.
+    /// A gait picked by the pack's weights, as on the desktop, leaving out any faster than
+    /// the pet's main gait (its most likely one) that would cover the trip in under a
+    /// second and a half. Never only the slow oddities (Sekhmet's swim) on a short trip.
     func gait(for distance: Double) -> String? {
         let catalog = pet.catalog
         let gaits = catalog.locomotion.filter { catalog.clip($0.clip).groundSpeed != nil }
-        let unhurried = gaits.filter { distance / (catalog.clip($0.clip).groundSpeed! * catalog.meshScale) >= 1.5 }
-        return unhurried.pickWeighted()
-            ?? gaits.min { catalog.clip($0.clip).groundSpeed! < catalog.clip($1.clip).groundSpeed! }?.clip
+        guard let main = gaits.max(by: { $0.weight < $1.weight }) else { return nil }
+        let mainSpeed = catalog.clip(main.clip).groundSpeed!
+        let unhurried = gaits.filter {
+            let speed = catalog.clip($0.clip).groundSpeed!
+            return speed <= mainSpeed || distance / (speed * catalog.meshScale) >= 1.5
+        }
+        return unhurried.pickWeighted() ?? main.clip
     }
 
     /// Eases the heading toward `facing`; the holder turns so that, whichever way the

@@ -664,7 +664,7 @@ final class PetController {
             let frame = panel.frame
             let screen = NSScreen.screens.first { $0.frame.contains(NSPoint(x: frame.midX, y: frame.midY)) }
                 ?? NSScreen.main ?? NSScreen.screens[0]
-            var visible = screen.visibleFrame
+            var visible = Self.floor(from: screen)
             // Standing on a window: walk only along it.
             if perch != nil { visible = visible.intersection(NSRect(x: perchFrame.minX, y: visible.minY, width: perchFrame.width, height: visible.height)) }
             let ppm = pointsPerMetre
@@ -672,6 +672,30 @@ final class PetController {
         }
         // Remember where wandering left the pet.
         engine.onChange = { [unowned self] _ in saveOrigin() }
+    }
+
+    /// The visible part of `screen`, widened across each screen beside it whose edge touches
+    /// and whose floor is level with it, so pets walk from one display to the next. (With
+    /// separate Spaces per display a crossing pet is cut off at the seam: it's crossing the gap.)
+    private static func floor(from screen: NSScreen) -> NSRect {
+        var area = screen.visibleFrame
+        var left = screen, right = screen
+        func neighbour(of screen: NSScreen, onRight: Bool) -> NSScreen? {
+            NSScreen.screens.first { other in
+                abs(onRight ? other.frame.minX - screen.frame.maxX : screen.frame.minX - other.frame.maxX) < 1
+                    && abs(other.visibleFrame.minY - area.minY) < 1
+            }
+        }
+        while let next = neighbour(of: right, onRight: true), next != screen {
+            area.size.width = next.visibleFrame.maxX - area.minX
+            right = next
+        }
+        while let next = neighbour(of: left, onRight: false), next != screen {
+            area.size.width = area.maxX - next.visibleFrame.minX
+            area.origin.x = next.visibleFrame.minX
+            left = next
+        }
+        return area
     }
 
     private func observeOcclusion() {

@@ -496,7 +496,16 @@ final class BehaviorEngine {
         let depthTo = !rig.motion.isPinned && !rig.motion.holdsDepth && Double.random(in: 0..<1) < settings.depthChance
             ? Double.random(in: PetActor.depthRange) : depth
         let travel = Step.Travel(dx: side * distance, depthTo: depthTo, speed: speed)
-        return ClipSequence(name: "Wander (\(name))", steps: [Step(clip: name, loops: nil, travel: travel)], side: side)
+        let trip = Step(clip: name, loops: nil, travel: travel)
+        // A gait that is a group's loop (a take-off, a glide, a landing): the start and end
+        // play in place around the trip, and interrupting it still lands.
+        if let group = catalog.groups.values.first(where: { $0.loop == name }) {
+            let end = group.end.map { Step(clip: $0, loops: 1) }
+            return ClipSequence(name: "Wander (\(name))",
+                                steps: group.start.map { Step(clip: $0, loops: 1) } + [trip] + end,
+                                exitSteps: end, side: side)
+        }
+        return ClipSequence(name: "Wander (\(name))", steps: [trip], side: side)
     }
 
     private func randomLoops() -> Int {

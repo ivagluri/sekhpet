@@ -394,6 +394,26 @@ final class PetHouse: NSObject, NSWindowDelegate {
         return (y, (left + right) / 2)
     }
 
+    private var nextOnScreenCheck: TimeInterval = 0
+
+    /// Like a pet's: a box whose feet aren't on any screen (saved mid-move, or left behind by
+    /// a display that went away) drops onto the bottom of the nearest one.
+    private func returnIfOffScreen(at now: TimeInterval) {
+        guard now >= nextOnScreenCheck, !movingBox, jump == nil, let base else { return }
+        nextOnScreenCheck = now + 1
+        let frame = window.frame
+        let feet = NSPoint(x: frame.minX + base.midX, y: frame.minY + base.y)
+        guard !NSScreen.screens.contains(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(feet) }),
+              let screen = NSScreen.screens.min(by: { abs($0.frame.midX - feet.x) < abs($1.frame.midX - feet.x) })
+        else { return }
+        perch = nil
+        fall = nil
+        awaited = nil
+        let visible = screen.visibleFrame
+        let x = min(max(feet.x, visible.minX + base.midX), visible.maxX - (frame.width - base.midX)) - base.midX
+        window.setFrameOrigin(NSPoint(x: x, y: visible.minY - base.y))
+    }
+
     private var screenUnderBox: NSScreen? {
         let frame = window.frame
         return NSScreen.screens.first { $0.frame.minX <= frame.midX && frame.midX < $0.frame.maxX } ?? window.screen
@@ -677,6 +697,7 @@ final class PetHouse: NSObject, NSWindowDelegate {
     func frame(at now: TimeInterval) {
         let dt = min(now - (lastFrame ?? now), 0.1)
         lastFrame = now
+        returnIfOffScreen(at: now)
         updatePerch(at: now, canFall: !scene.isPaused)
         guard !scene.isPaused else { return }
         if fruit == nil, now >= fruitDue { dropFruit() }

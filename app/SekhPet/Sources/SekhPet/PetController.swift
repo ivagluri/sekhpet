@@ -6,7 +6,7 @@ import SceneKit
 /// Settings are stored per pet as "<name>.<key>".
 @MainActor
 final class PetController {
-    enum PauseReason { case user, occluded, screensAsleep }
+    enum PauseReason { case user, occluded, screensAsleep, locked }
     private enum Key {
         static let origin = "petOrigin"
         static let mode = "behaviorMode"
@@ -275,7 +275,8 @@ final class PetController {
         guard let perch, !sceneView.isDragging, let checked = checkPerch(perch, at: now) else { return }
         let frame = panel.frame
         guard let window = checked else {
-            if canFall {
+            // Locked, other apps' windows leave the list, and come back a moment after unlocking.
+            if canFall, now >= overviewUntil {
                 rememberForReturn(perch)
                 startFall(at: now)
             }
@@ -369,7 +370,8 @@ final class PetController {
     /// in at the nearest screen's bottom edge.
     private func returnIfOffScreen(at now: TimeInterval) {
         // Not while the screens wake, when they can be briefly missing from the list.
-        guard now - lastOnScreenCheck >= 1, now >= overviewUntil, !sceneView.isDragging else { return }
+        guard now - lastOnScreenCheck >= 1, now >= overviewUntil, !sceneView.isDragging,
+              pauseReasons.isDisjoint(with: [.screensAsleep, .locked]) else { return }
         lastOnScreenCheck = now
         let frame = panel.frame
         let feet = NSPoint(x: frame.midX, y: frame.minY + floorInWindow)
@@ -598,7 +600,8 @@ final class PetController {
     func setPaused(_ paused: Bool, _ reason: PauseReason) {
         if paused { pauseReasons.insert(reason) } else { pauseReasons.remove(reason) }
         // Waking the screens zooms every window out and back in, like Mission Control: ride it.
-        if reason == .screensAsleep { overviewUntil = CACurrentMediaTime() + 2 }
+        // Unlocking does the same.
+        if reason == .screensAsleep || reason == .locked { overviewUntil = CACurrentMediaTime() + 2 }
         let shouldPause = !pauseReasons.isEmpty
         guard shouldPause != engine.isPaused else { return }
         stage.scene.isPaused = shouldPause

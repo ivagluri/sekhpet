@@ -275,6 +275,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+        // Locked or switched away from, other apps' windows leave the window list: perched pets
+        // would take their window for closed.
+        let distributed = DistributedNotificationCenter.default()
+        for (name, locked) in [("com.apple.screenIsLocked", true), ("com.apple.screenIsUnlocked", false)] {
+            distributed.addObserver(forName: Notification.Name(name), object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    for pet in self?.pets ?? [] { pet.setPaused(locked, .locked) }
+                }
+            }
+        }
+        for (name, away) in [(NSWorkspace.sessionDidResignActiveNotification, true),
+                             (NSWorkspace.sessionDidBecomeActiveNotification, false)] {
+            workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    for pet in self?.pets ?? [] { pet.setPaused(away, .locked) }
+                }
+            }
+        }
     }
 
     private func menuActions() -> StatusMenu.Actions {

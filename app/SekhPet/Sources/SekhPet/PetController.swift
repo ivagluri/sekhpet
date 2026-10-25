@@ -63,7 +63,7 @@ final class PetController {
         engine.tick()
         panel.orderFrontRegardless()
         // Back on the window it was standing on, if that's still there.
-        snapToSurface(within: 6)
+        perch.snapToSurface(within: 6)
     }
 
     /// Takes the pet off the desktop and releases its window and timers.
@@ -86,18 +86,15 @@ final class PetController {
             stage.rig.look.update(cursor: nil, at: now)
             return
         }
-        // Before the pause check: a pet off every screen counts as hidden, so it's paused.
-        returnIfOffScreen(at: now)
-        // Also before it: a pet covered along with its window must come back up with it.
-        keepWithWindow()
         // A covered pet still rides its window: Mission Control covers the ones that sit
-        // with their window, and they must follow it through and back.
+        // with their window, and they must follow it through and back. And a pet off every
+        // screen counts as hidden, so it's paused, but must still come back.
         guard !engine.isPaused else {
-            updatePerch(at: now, canFall: false)
+            perch.update(at: now, canFall: false)
             return
         }
         // On a window of an app where Claude Code is working (a terminal), the pet works too.
-        engine.work = perch != nil && ClaudeWatch.shared.hosts.contains(perchOwner) ? catalog.workClip : nil
+        engine.work = perch.surface.map { ClaudeWatch.shared.hosts.contains($0.owner) } == true ? catalog.workClip : nil
         engine.tick()
         stage.rig.motion.update(at: now)
         let moving = stage.rig.motion.isMoving && !stage.rig.motion.isPinned
@@ -106,7 +103,7 @@ final class PetController {
             applyRendering(to: sceneView)
         }
         stage.rig.look.update(cursor: cursorInScene(), at: now)
-        updatePerch(at: now)
+        perch.update(at: now, canFall: true)
         restartRenderingIfStalled(at: now)
     }
 
@@ -119,10 +116,7 @@ final class PetController {
     func enterHouse() -> SCNNode {
         housed = true
         engine.work = nil
-        perch = nil
-        fall = nil
-        jump = nil
-        awaitedWindow = nil
+        perch.leave()
         panel.orderOut(nil)
         setPaused(false, .occluded)
         setDrawing(false)
@@ -144,7 +138,7 @@ final class PetController {
         panel.orderFrontRegardless()
         setDrawing(!engine.isPaused)
         renderWatch.reset()
-        snapToSurface(within: 6)
+        perch.snapToSurface(within: 6)
     }
 
     // MARK: Standing on windows
@@ -173,64 +167,30 @@ final class PetController {
 
     func setSnapping(_ on: Bool) {
         snapping = on
-        if !on { perch = nil }
+        perch.snapping = on
         defaults.set(on, forKey: key(Key.snapping))
     }
-    private var perch: CGWindowID? {
-        didSet { stage.rig.motion.holdsDepth = perch != nil }
-    }
-    private var perchFrame = NSRect.zero
-    private var perchLayer = 0
-    private var perchOwner: pid_t = 0
-    /// Until then, window changes come from Mission Control, Show Desktop or the screens waking.
-    private var overviewUntil: TimeInterval = 0
-    /// The window the pet just stepped off, possibly still shrinking away: never a landing spot.
-    private var leftWindow: CGWindowID?
-    private var fall: (fromY: CGFloat, toY: CGFloat, started: TimeInterval)?
-    private static let gravity: CGFloat = 2500  // points per second squared
+
+    private lazy var perch: WindowPerch = {
+        let perch = WindowPerch(window: panel, freeLevel: .floating) { [unowned self] in
+            NSPoint(x: panel.frame.width / 2, y: floorInWindow)
+        }
+        perch.snapping = snapping
+        perch.isHeld = { [unowned self] in sceneView.isDragging }
+        perch.fallBegan = { [unowned self] in engine.dragBegan() }  // held in the air
+        perch.fallEnded = { [unowned self] in engine.dragEnded() }  // the landing
+        perch.jumpBegan = { [unowned self] in engine.jumpBegan() }
+        perch.jumpEnded = { [unowned self] in engine.jumpEnded() }
+        perch.settled = { [unowned self] in saveOrigin() }
+        perch.perchChanged = { [unowned self] onWindow in
+            stage.rig.motion.holdsDepth = onWindow
+            if onWindow { stage.rig.actor.setDepth(0, over: 0.3) }
+        }
+        return perch
+    }()
 
     /// Height of the pet's feet above the window's bottom edge, in points.
     private var floorInWindow: CGFloat { -stage.bounds.minY * pointsPerMetre }
-
-    private var screenUnderPet: NSScreen {
-        let frame = panel.frame
-        return NSScreen.screens.first { $0.frame.minX <= frame.midX && frame.midX < $0.frame.maxX }
-            ?? NSScreen.main ?? NSScreen.screens[0]
-    }
-
-    /// Lands on the nearest window top or screen bottom within `gap` points of the
-    /// pet's feet, under its centre. Returns whether it found one.
-    @discardableResult
-    private func snapToSurface(within gap: CGFloat) -> Bool {
-        guard let best = landingSpot(for: panel.frame, within: gap, among: DesktopSurfaces.windows()) else { return false }
-        perch = best.window?.window
-        perchFrame = best.window?.frame ?? .zero
-        perchLayer = best.window?.layer ?? 0
-        perchOwner = best.window?.owner ?? 0
-        if perch != nil { stage.rig.actor.setDepth(0, over: 0.3) }
-        panel.setFrameOrigin(NSPoint(x: panel.frame.minX, y: best.top - floorInWindow))
-        return true
-    }
-
-    /// The nearest window top or screen bottom within `gap` points of the feet of a pet
-    /// with window `frame`, under its centre.
-    private func landingSpot(for frame: NSRect, within gap: CGFloat, among surfaces: [DesktopSurfaces.Surface])
-        -> (top: CGFloat, window: DesktopSurfaces.Surface?)? {
-        guard snapping else { return nil }
-        let feet = frame.minY + floorInWindow
-        var best: (top: CGFloat, window: DesktopSurfaces.Surface?)?
-        for surface in surfaces
-            where surface.window != leftWindow
-               && surface.frame.minX <= frame.midX && frame.midX <= surface.frame.maxX
-               && abs(surface.frame.maxY - feet) <= gap && abs(surface.frame.maxY - feet) < abs((best?.top ?? .infinity) - feet) {
-            best = (surface.frame.maxY, surface)
-        }
-        let bottom = screenUnderPet.visibleFrame.minY
-        if abs(bottom - feet) <= gap, abs(bottom - feet) < abs((best?.top ?? .infinity) - feet) {
-            best = (bottom, nil)
-        }
-        return best
-    }
 
     // MARK: Landing shadow
 
@@ -243,220 +203,11 @@ final class PetController {
     /// would snap to if let go now.
     private func showLanding(for origin: NSPoint) {
         let frame = NSRect(origin: origin, size: panel.frame.size)
-        let spot = landingSpot(for: frame, within: 40, among: dragSurfaces)
+        let spot = perch.landingSpot(for: frame, within: 40, among: dragSurfaces)
         let idle = catalog.clip(catalog.idleClip).bounds
         let width = min(max((idle.max[0] - idle.min[0]) * pointsPerMetre * 0.7, 40), 260)
         landingShadow.show(at: NSPoint(x: frame.midX, y: spot?.top ?? frame.minY + floorInWindow),
                            width: width, glowing: spot != nil, behind: panel)
-    }
-
-    /// Follows the perch window, or falls when it's gone; animates a fall in progress.
-    /// Without `canFall` (while paused) it only rides, and leaves any fall for later.
-    private func updatePerch(at now: TimeInterval, canFall: Bool = true) {
-        if canFall, animateJump(at: now) { return }
-        if canFall, perch == nil, fall == nil { watchForReturn(at: now) }
-        if let fall {
-            guard canFall else { return }
-            let t = now - fall.started
-            let y = max(fall.toY, fall.fromY - 0.5 * Self.gravity * t * t)
-            panel.setFrameOrigin(NSPoint(x: panel.frame.minX, y: y))
-            if y <= fall.toY {
-                self.fall = nil
-                // What it was falling to may have moved away meanwhile: keep falling.
-                if !snapToSurface(within: 4) {
-                    startFall(at: now)
-                    if self.fall != nil { return }
-                }
-                engine.dragEnded()  // the landing
-                saveOrigin()
-            }
-            return
-        }
-        guard let perch, !sceneView.isDragging, let checked = checkPerch(perch, at: now) else { return }
-        let frame = panel.frame
-        guard let window = checked else {
-            // Locked, other apps' windows leave the list, and come back a moment after unlocking.
-            if canFall, now >= overviewUntil {
-                rememberForReturn(perch)
-                startFall(at: now)
-            }
-            return
-        }
-        // Mission Control and Show Desktop shrink and slide windows, then put them back:
-        // ride along through it rather than treating it as minimizing.
-        // Checked on every change, and every frame while one is under way; changes stay
-        // treated this way for a second after it ends, while windows animate back.
-        if perchMovedAt == now || now < overviewUntil, missionControlSeen {
-            overviewUntil = now + 1
-        }
-        if now >= overviewUntil {
-            // Stepped off the end of a window that got narrower.
-            let shifted = frame.midX + (window.frame.minX - perchFrame.minX)
-            guard window.frame.minX <= shifted, shifted <= window.frame.maxX else {
-                if canFall { startFall(at: now) }
-                return
-            }
-            // A window that changes size while its top edge moves is minimizing (the genie
-            // or scale effect) or being resized from the top: step off rather than ride it.
-            if window.frame.size != perchFrame.size, window.frame.maxY != perchFrame.maxY {
-                if canFall {
-                    rememberForReturn(perch)
-                    startFall(at: now)
-                }
-                return
-            }
-        }
-
-        // Ride along with the window's top-left corner, but never off the screen: Show
-        // Desktop slides windows away and back, so the pet waits at the edge and rides
-        // back in with it.
-        let dx = window.frame.minX - perchFrame.minX, dy = window.frame.maxY - perchFrame.maxY
-        guard dx != 0 || dy != 0 else { return }
-        let feet = NSPoint(x: frame.midX + dx, y: frame.minY + dy + floorInWindow)
-        guard NSScreen.screens.contains(where: { $0.frame.contains(feet) }) else { return }
-        panel.setFrameOrigin(NSPoint(x: frame.minX + dx, y: frame.minY + dy))
-        perchFrame = window.frame
-    }
-
-    private var nextPerchCheck: TimeInterval = 0
-    private var perchMovedAt: TimeInterval = 0
-    private var lastSeenFrame = NSRect.zero
-
-    /// The perch window, when it's due a check: every frame while it moves, for smooth
-    /// riding while it's dragged, otherwise 10 times a second, on a beat all pets share
-    /// so they read the windows once between them. (Reading from a background thread
-    /// instead stalled drawing for half a second.)
-    private func checkPerch(_ perch: CGWindowID, at now: TimeInterval) -> DesktopSurfaces.Surface?? {
-        guard now >= nextPerchCheck else { return nil }
-        let snapshot = DesktopSurfaces.snapshot(at: now)
-        let window = snapshot.windows[perch]
-        missionControlSeen = snapshot.missionControl
-        panelInFrontOfPerch = window.map { perch in
-            snapshot.windows[CGWindowID(panel.windowNumber)].map { $0.place < perch.place } ?? false
-        } ?? false
-        if let window, window.surface.frame != lastSeenFrame {
-            perchMovedAt = now
-            lastSeenFrame = window.surface.frame
-        }
-        nextPerchCheck = now - perchMovedAt < 0.5 ? now : ((now * 10).rounded(.down) + 1) / 10
-        return .some(window?.surface)
-    }
-
-    private var missionControlSeen = false
-    private var panelInFrontOfPerch = false
-
-
-    /// A pet standing on an ordinary window sits just above that window instead of above
-    /// everything, so whatever covers the window covers the pet too. Pets on the screen
-    /// bottom or an always-on-top window, or being dragged or falling, stay on top.
-    private func keepWithWindow() {
-        guard let perch, perchLayer == 0, !sceneView.isDragging else {
-            if panel.level != .floating {
-                panel.level = .floating
-                panel.orderFrontRegardless()
-            }
-            return
-        }
-        // Clicking the window brings it in front of the pet: go back on top of it.
-        if panel.level == .normal, panelInFrontOfPerch { return }
-        panel.level = .normal
-        panel.order(.above, relativeTo: Int(perch))
-        panelInFrontOfPerch = true
-    }
-
-    private var lastOnScreenCheck: TimeInterval = 0
-
-    /// Safety net: a pet whose feet are on no screen (whatever put it there) drops back
-    /// in at the nearest screen's bottom edge.
-    private func returnIfOffScreen(at now: TimeInterval) {
-        // Not while the screens wake, when they can be briefly missing from the list.
-        guard now - lastOnScreenCheck >= 1, now >= overviewUntil, !sceneView.isDragging,
-              pauseReasons.isDisjoint(with: [.screensAsleep, .locked]) else { return }
-        lastOnScreenCheck = now
-        let frame = panel.frame
-        let feet = NSPoint(x: frame.midX, y: frame.minY + floorInWindow)
-        // A point of slack: with the Dock hidden, pets stand on the screen's very bottom edge,
-        // and rounding can leave the feet a hair below it.
-        guard !NSScreen.screens.contains(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(feet) }),
-              let screen = NSScreen.screens.min(by: { abs($0.frame.midX - feet.x) < abs($1.frame.midX - feet.x) })
-        else { return }
-        perch = nil
-        fall = nil
-        let visible = screen.visibleFrame
-        // The body back on screen, not the whole window: that's much wider, for the widest clip.
-        let x = min(max(frame.midX, visible.minX), visible.maxX) - frame.width / 2
-        panel.setFrameOrigin(NSPoint(x: x, y: visible.minY - floorInWindow))
-        saveOrigin()
-    }
-
-    // MARK: Jumping back
-
-    /// The window the pet fell from when it minimized or hid, where on it the pet stood,
-    /// whether it has been seen gone, and its last frame, to wait for it to settle.
-    private var awaitedWindow: (id: CGWindowID, offset: CGFloat, gone: Bool, lastFrame: NSRect)?
-    private var jump: (from: NSPoint, to: NSPoint, started: TimeInterval, duration: TimeInterval)?
-    private var nextReturnCheck: TimeInterval = 0
-
-    private func rememberForReturn(_ window: CGWindowID) {
-        awaitedWindow = (window, panel.frame.midX - perchFrame.minX, false, .zero)
-    }
-
-    /// Jumps back onto the awaited window once it's back on screen and has stopped
-    /// animating (restoring from the Dock, or unhiding).
-    private func watchForReturn(at now: TimeInterval) {
-        guard let awaited = awaitedWindow, !sceneView.isDragging, now >= nextReturnCheck else { return }
-        nextReturnCheck = ((now * 10).rounded(.down) + 1) / 10
-        guard let window = DesktopSurfaces.snapshot(at: now).windows[awaited.id]?.surface else {
-            awaitedWindow?.gone = true
-            return
-        }
-        awaitedWindow?.lastFrame = window.frame
-        guard awaited.gone, window.frame == awaited.lastFrame else { return }
-        awaitedWindow = nil
-        let frame = panel.frame
-        let midX = min(max(window.frame.minX + awaited.offset, window.frame.minX + 20), window.frame.maxX - 20)
-        let to = NSPoint(x: midX - frame.width / 2, y: window.frame.maxY - floorInWindow)
-        let rise = abs(to.y - frame.minY)
-        // Leaves the ground once the take-off clip (JumpStart, where there is one) has played.
-        let takeOff = engine.jumpBegan()
-        jump = (frame.origin, to, now + takeOff, min(0.9, 0.45 + Double(rise) / 2000))
-        leftWindow = nil
-    }
-
-    /// A jump in progress: an arc up and over to the window top, then the landing.
-    private func animateJump(at now: TimeInterval) -> Bool {
-        guard let jump else { return false }
-        let t = max(0, min(1, (now - jump.started) / jump.duration))
-        let arc = max(80, abs(jump.to.y - jump.from.y) * 0.25)
-        let x = jump.from.x + (jump.to.x - jump.from.x) * t
-        let y = jump.from.y + (jump.to.y - jump.from.y) * t + arc * 4 * t * (1 - t)
-        panel.setFrameOrigin(NSPoint(x: x, y: y))
-        if t >= 1 {
-            self.jump = nil
-            let landed = snapToSurface(within: 4)
-            engine.jumpEnded()
-            if !landed { startFall(at: now) }
-            saveOrigin()
-        }
-        return true
-    }
-
-    /// Drops to the highest window top below the pet's feet, or the screen bottom.
-    private func startFall(at now: TimeInterval) {
-        if perch != nil { leftWindow = perch }
-        perch = nil
-        let frame = panel.frame
-        let feet = frame.minY + floorInWindow
-        var landing = screenUnderPet.visibleFrame.minY
-        for surface in DesktopSurfaces.windows()
-            where surface.window != leftWindow
-               && surface.frame.minX <= frame.midX && frame.midX <= surface.frame.maxX
-               && surface.frame.maxY < feet - 1 && surface.frame.maxY > landing {
-            landing = surface.frame.maxY
-        }
-        guard landing < feet - 1 else { return }
-        fall = (frame.minY, landing - floorInWindow, now)
-        engine.dragBegan()  // held in the air
     }
 
     /// Replaces the view if SceneKit has stopped drawing (seen after waking from
@@ -601,7 +352,7 @@ final class PetController {
         if paused { pauseReasons.insert(reason) } else { pauseReasons.remove(reason) }
         // Waking the screens zooms every window out and back in, like Mission Control: ride it.
         // Unlocking does the same.
-        if reason == .screensAsleep || reason == .locked { overviewUntil = CACurrentMediaTime() + 2 }
+        if reason == .screensAsleep || reason == .locked { perch.setAway(paused, reason) }
         let shouldPause = !pauseReasons.isEmpty
         guard shouldPause != engine.isPaused else { return }
         stage.scene.isPaused = shouldPause
@@ -639,18 +390,14 @@ final class PetController {
             case .click: engine.click()
             case .doubleClick: engine.doubleClick()
             case .dragBegan:
-                perch = nil
-                leftWindow = nil
-                fall = nil
-                jump = nil
-                awaitedWindow = nil
+                perch.leave()
                 dragSurfaces = DesktopSurfaces.windows()
                 engine.dragBegan()
             case .dragEnded:
                 landingShadow.show(at: nil, width: 0, behind: panel)
                 dragSurfaces = []
                 engine.dragEnded()
-                snapToSurface(within: 40)
+                perch.snapToSurface(within: 40)
             }
         }
         view.onMoved = { [unowned self] _ in saveOrigin() }
@@ -677,7 +424,9 @@ final class PetController {
                 ?? NSScreen.main ?? NSScreen.screens[0]
             var visible = Self.floor(from: screen)
             // Standing on a window: walk only along it.
-            if perch != nil { visible = visible.intersection(NSRect(x: perchFrame.minX, y: visible.minY, width: perchFrame.width, height: visible.height)) }
+            if let window = perch.surface?.frame {
+                visible = visible.intersection(NSRect(x: window.minX, y: visible.minY, width: window.width, height: visible.height))
+            }
             let ppm = pointsPerMetre
             return (left: (frame.midX - visible.minX) / ppm, right: (visible.maxX - frame.midX) / ppm)
         }
@@ -760,6 +509,7 @@ final class PetController {
 
     private func restoreBehavior() {
         snapping = defaults.object(forKey: key(Key.snapping)) as? Bool ?? true
+        perch.snapping = snapping
         let doubleClip = string(Key.doubleClickClip), doubleGroup = string(Key.doubleClickGroup)
         // Ignore a saved choice the pack no longer has.
         if doubleClip.map({ catalog.clips[$0] != nil }) ?? doubleGroup.map({ catalog.groups[$0] != nil }) ?? false {

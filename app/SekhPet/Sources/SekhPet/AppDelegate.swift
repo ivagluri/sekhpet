@@ -268,7 +268,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         let workspace = NSWorkspace.shared.notificationCenter
-        let away = { [weak self] (on: Bool, reason: PetController.PauseReason) in
+        let away: @MainActor (Bool, PetController.PauseReason) -> Void = { [weak self] on, reason in
             for pet in self?.pets ?? [] { pet.setPaused(on, reason) }
             self?.house?.setAway(on, reason)
         }

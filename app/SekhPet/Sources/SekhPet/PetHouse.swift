@@ -35,8 +35,6 @@ final class PetHouse: NSObject, NSWindowDelegate {
     private var lastFrame: TimeInterval?
     private var userPaused = false
     private var hidden = false
-    /// Why the house is away like a pet: the screens asleep or the session locked.
-    private var awayReasons: Set<PetController.PauseReason> = []
     private var grabbed: Grab?
     private var throwSamples: [(position: SCNVector3, time: TimeInterval)] = []
     private var occlusionObserver: NSObjectProtocol?
@@ -109,7 +107,7 @@ final class PetHouse: NSObject, NSWindowDelegate {
         layout()
         ball.position = SCNVector3(-width / 4, 1.5, depth / 6)
         // Back on the window it was standing on, if that's still there.
-        snapToSurface(within: 6)
+        perch.snapToSurface(within: 6)
 
         occlusionObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main) { [weak self] _ in
@@ -176,15 +174,14 @@ final class PetHouse: NSObject, NSWindowDelegate {
     /// Like a pet's: asleep or locked, other apps' windows can leave the window list, and
     /// waking or unlocking zooms them out and back in. Ride it rather than fall.
     func setAway(_ away: Bool, _ reason: PetController.PauseReason) {
-        if away { awayReasons.insert(reason) } else { awayReasons.remove(reason) }
-        overviewUntil = CACurrentMediaTime() + 2
+        perch.setAway(away, reason)
         applyPaused()
     }
 
     /// The physics and the room's animations stop with Pause All, while the window can't be
     /// seen, and while the screens sleep or are locked.
     private func applyPaused() {
-        scene.isPaused = userPaused || hidden || !awayReasons.isEmpty
+        scene.isPaused = userPaused || hidden || perch.isAway
         for resident in residents { resident.pet.setPaused(hidden, .occluded) }
     }
 
@@ -382,21 +379,14 @@ final class PetHouse: NSObject, NSWindowDelegate {
 
     // MARK: Standing on windows, like a pet
 
-    /// The window the box stands on, as last seen, and its window level.
-    private var perch: (window: CGWindowID, frame: NSRect, layer: Int)?
-    private var fall: (fromY: CGFloat, toY: CGFloat, started: TimeInterval)?
-    private var jump: (from: NSPoint, to: NSPoint, started: TimeInterval, duration: TimeInterval)?
-    /// The window the box fell from when it minimized or hid, to jump back onto.
-    private var awaited: (window: CGWindowID, offset: CGFloat, gone: Bool, lastFrame: NSRect)?
-    /// The window just stepped off, possibly still shrinking away: never a landing spot.
-    private var leftWindow: CGWindowID?
-    private var nextPerchCheck: TimeInterval = 0
-    private var nextReturnCheck: TimeInterval = 0
-    private var perchMovedAt: TimeInterval = 0
-    private var lastSeenFrame = NSRect.zero
-    /// Until then, window changes come from Mission Control, Show Desktop, or the screens waking or unlocking.
-    private var overviewUntil: TimeInterval = 0
-    private static let gravity: CGFloat = 2500
+    /// Floats only on an always-on-top window: elsewhere it sits among the windows.
+    private lazy var perch: WindowPerch = {
+        let perch = WindowPerch(window: window, freeLevel: .normal) { [unowned self] in
+            base.map { NSPoint(x: $0.midX, y: $0.y) }
+        }
+        perch.isHeld = { [unowned self] in movingBox }
+        return perch
+    }()
 
     /// The bottom edge of the floor and its middle, in window coordinates: the box's feet.
     private var base: (y: CGFloat, midX: CGFloat)? {
@@ -405,202 +395,10 @@ final class PetHouse: NSObject, NSWindowDelegate {
         return (y, (left + right) / 2)
     }
 
-    private var nextOnScreenCheck: TimeInterval = 0
-
-    /// Like a pet's: a box whose feet aren't on any screen (saved mid-move, or left behind by
-    /// a display that went away) drops onto the bottom of the nearest one.
-    private func returnIfOffScreen(at now: TimeInterval) {
-        // Not while the screens sleep, are locked or have just come back, when they can be missing from the list.
-        guard now >= nextOnScreenCheck, now >= overviewUntil, awayReasons.isEmpty,
-              !movingBox, jump == nil, let base else { return }
-        nextOnScreenCheck = now + 1
-        let frame = window.frame
-        let feet = NSPoint(x: frame.minX + base.midX, y: frame.minY + base.y)
-        guard !NSScreen.screens.contains(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(feet) }),
-              let screen = NSScreen.screens.min(by: { abs($0.frame.midX - feet.x) < abs($1.frame.midX - feet.x) })
-        else { return }
-        perch = nil
-        fall = nil
-        awaited = nil
-        let visible = screen.visibleFrame
-        let x = min(max(feet.x, visible.minX + base.midX), visible.maxX - (frame.width - base.midX)) - base.midX
-        window.setFrameOrigin(NSPoint(x: x, y: visible.minY - base.y))
-    }
-
-    private var screenUnderBox: NSScreen? {
-        let frame = window.frame
-        return NSScreen.screens.first { $0.frame.minX <= frame.midX && frame.midX < $0.frame.maxX } ?? window.screen
-    }
-
     private var movingBox: Bool {
         switch grabbed {
         case .box?, .resize?: true
         default: false
-        }
-    }
-
-    /// Lands on the nearest window top or screen bottom within `gap` points of the box's
-    /// bottom edge, under its middle.
-    private func snapToSurface(within gap: CGFloat = 40) {
-        guard let base else { return }
-        let frame = window.frame
-        let bottom = frame.minY + base.y, middle = frame.minX + base.midX
-        var best: (top: CGFloat, surface: DesktopSurfaces.Surface?)?
-        for surface in DesktopSurfaces.windows()
-            where surface.window != leftWindow
-               && surface.frame.minX <= middle && middle <= surface.frame.maxX
-               && abs(surface.frame.maxY - bottom) <= gap && abs(surface.frame.maxY - bottom) < abs((best?.top ?? .infinity) - bottom) {
-            best = (surface.frame.maxY, surface)
-        }
-        if let floor = screenUnderBox?.visibleFrame.minY,
-           abs(floor - bottom) <= gap, abs(floor - bottom) < abs((best?.top ?? .infinity) - bottom) {
-            best = (floor, nil)
-        }
-        guard let best else { return }
-        window.setFrameOrigin(NSPoint(x: frame.minX, y: frame.minY + best.top - bottom))
-        perch = best.surface.map { ($0.window, $0.frame, $0.layer) }
-        lastSeenFrame = perch?.frame ?? .zero
-        leftWindow = nil
-        keepWithWindow(nil)
-    }
-
-    private func leavePerch() {
-        perch = nil
-        fall = nil
-        jump = nil
-        awaited = nil
-        leftWindow = nil
-        keepWithWindow(nil)
-    }
-
-    /// Standing on an ordinary window, the box sits just above it, so whatever covers the
-    /// window covers the box too; on an always-on-top window it stays on top.
-    private func keepWithWindow(_ snapshot: DesktopSurfaces.Snapshot?) {
-        guard let perch else {
-            if window.level != .normal { window.level = .normal }
-            return
-        }
-        guard perch.layer == 0 else {
-            if window.level != .floating { window.level = .floating }
-            return
-        }
-        window.level = .normal
-        // Clicking the window brings it in front of the box: go back on top of it.
-        if let snapshot, let mine = snapshot.windows[CGWindowID(window.windowNumber)],
-           let theirs = snapshot.windows[perch.window], mine.place < theirs.place { return }
-        window.order(.above, relativeTo: Int(perch.window))
-    }
-
-    /// Rides the perch window, falls when it goes, and jumps back when it returns.
-    /// While the house is hidden (Mission Control covers it) it rides along but never falls.
-    private func updatePerch(at now: TimeInterval, canFall: Bool) {
-        guard !movingBox else { return }
-        if let jump {
-            guard canFall else { return }
-            animateJump(jump, at: now)
-            return
-        }
-        if let fall {
-            guard canFall else { return }
-            let t = now - fall.started
-            let y = max(fall.toY, fall.fromY - 0.5 * Self.gravity * t * t)
-            window.setFrameOrigin(NSPoint(x: window.frame.minX, y: y))
-            if y <= fall.toY {
-                self.fall = nil
-                snapToSurface(within: 4)
-            }
-            return
-        }
-        guard let perch else {
-            if canFall { watchForReturn(at: now) }
-            return
-        }
-        // Every frame while the window moves, for smooth riding; otherwise on the pets' 10 Hz beat.
-        guard now >= nextPerchCheck, let base else { return }
-        let snapshot = DesktopSurfaces.snapshot(at: now)
-        let seen = snapshot.windows[perch.window]?.surface
-        if let seen, seen.frame != lastSeenFrame {
-            perchMovedAt = now
-            lastSeenFrame = seen.frame
-        }
-        nextPerchCheck = now - perchMovedAt < 0.5 ? now : ((now * 10).rounded(.down) + 1) / 10
-        guard let seen else {
-            // Locked, other apps' windows leave the list, and come back a moment after unlocking.
-            if canFall, now >= overviewUntil { fallOff(rememberingWindow: true, at: now) }
-            return
-        }
-        let frame = window.frame
-        if perchMovedAt == now || now < overviewUntil, snapshot.missionControl { overviewUntil = now + 1 }
-        if now >= overviewUntil {
-            // Off the end of a window that got narrower.
-            let middle = frame.minX + base.midX + (seen.frame.minX - perch.frame.minX)
-            guard seen.frame.minX <= middle, middle <= seen.frame.maxX else {
-                if canFall { fallOff(rememberingWindow: false, at: now) }
-                return
-            }
-            // Changing size while its top moves: minimizing, or resizing from the top.
-            if seen.frame.size != perch.frame.size, seen.frame.maxY != perch.frame.maxY {
-                if canFall { fallOff(rememberingWindow: true, at: now) }
-                return
-            }
-        }
-        keepWithWindow(snapshot)
-        // Ride along, but never with the bottom edge off every screen (Show Desktop slides windows away).
-        let dx = seen.frame.minX - perch.frame.minX, dy = seen.frame.maxY - perch.frame.maxY
-        guard dx != 0 || dy != 0 else { return }
-        let feet = NSPoint(x: frame.minX + base.midX + dx, y: frame.minY + base.y + dy)
-        guard NSScreen.screens.contains(where: { $0.frame.contains(feet) }) else { return }
-        window.setFrameOrigin(NSPoint(x: frame.minX + dx, y: frame.minY + dy))
-        self.perch?.frame = seen.frame
-    }
-
-    /// Drops to the highest window top below the box, or the screen bottom.
-    private func fallOff(rememberingWindow: Bool, at now: TimeInterval) {
-        guard let perch, let base else { return }
-        let frame = window.frame
-        if rememberingWindow { awaited = (perch.window, frame.minX + base.midX - perch.frame.minX, false, .zero) }
-        leftWindow = perch.window
-        self.perch = nil
-        keepWithWindow(nil)
-        let bottom = frame.minY + base.y, middle = frame.minX + base.midX
-        var landing = screenUnderBox?.visibleFrame.minY ?? bottom
-        for surface in DesktopSurfaces.windows()
-            where surface.window != leftWindow
-               && surface.frame.minX <= middle && middle <= surface.frame.maxX
-               && surface.frame.maxY < bottom - 1 && surface.frame.maxY > landing {
-            landing = surface.frame.maxY
-        }
-        guard landing < bottom - 1 else { return }
-        fall = (frame.minY, frame.minY - (bottom - landing), now)
-    }
-
-    /// Jumps back onto the window it fell from once that's back and has stopped animating.
-    private func watchForReturn(at now: TimeInterval) {
-        guard let awaited, now >= nextReturnCheck, let base else { return }
-        nextReturnCheck = ((now * 10).rounded(.down) + 1) / 10
-        guard let seen = DesktopSurfaces.snapshot(at: now).windows[awaited.window]?.surface else {
-            self.awaited?.gone = true
-            return
-        }
-        self.awaited?.lastFrame = seen.frame
-        guard awaited.gone, seen.frame == awaited.lastFrame else { return }
-        self.awaited = nil
-        let frame = window.frame
-        let middle = min(max(seen.frame.minX + awaited.offset, seen.frame.minX + 20), seen.frame.maxX - 20)
-        let to = NSPoint(x: middle - base.midX, y: seen.frame.maxY - base.y)
-        jump = (frame.origin, to, now, min(0.9, 0.45 + Double(abs(to.y - frame.minY)) / 2000))
-        leftWindow = nil
-    }
-
-    /// An arc up and over to the window top.
-    private func animateJump(_ jump: (from: NSPoint, to: NSPoint, started: TimeInterval, duration: TimeInterval), at now: TimeInterval) {
-        let t = max(0, min(1, (now - jump.started) / jump.duration))
-        let arc = max(80, abs(jump.to.y - jump.from.y) * 0.25)
-        window.setFrameOrigin(NSPoint(x: jump.from.x + (jump.to.x - jump.from.x) * t,
-                                      y: jump.from.y + (jump.to.y - jump.from.y) * t + arc * 4 * t * (1 - t)))
-        if t >= 1 {
-            self.jump = nil
-            snapToSurface(within: 4)
         }
     }
 
@@ -711,8 +509,7 @@ final class PetHouse: NSObject, NSWindowDelegate {
     func frame(at now: TimeInterval) {
         let dt = min(now - (lastFrame ?? now), 0.1)
         lastFrame = now
-        returnIfOffScreen(at: now)
-        updatePerch(at: now, canFall: !scene.isPaused)
+        perch.update(at: now, canFall: !scene.isPaused)
         guard !scene.isPaused else { return }
         if fruit == nil, now >= fruitDue { dropFruit() }
         for thing in [ball, fruit].compactMap({ $0 }) { keepInside(thing) }
@@ -1020,7 +817,7 @@ final class PetHouse: NSObject, NSWindowDelegate {
             throwSamples.append((node.position, now))
             throwSamples.removeAll { now - $0.time > 0.1 }
         case let .resize(from, start):
-            leavePerch()
+            perch.leave()
             // Grows down and to the right from the top-left corner, keeping the box's shape.
             let mouse = NSEvent.mouseLocation
             let change = max(mouse.x - start.x, (start.y - mouse.y) / Self.aspect)
@@ -1028,7 +825,7 @@ final class PetHouse: NSObject, NSWindowDelegate {
             window.setFrame(NSRect(x: from.minX, y: from.maxY - height, width: width, height: height), display: true)
             updateFrost()
         case let .box(offset):
-            leavePerch()
+            perch.leave()
             let mouse = NSEvent.mouseLocation
             var origin = NSPoint(x: mouse.x - offset.x, y: mouse.y - offset.y)
             // Up to the menu bar with the top of the box, not the empty space above it.
@@ -1047,7 +844,7 @@ final class PetHouse: NSObject, NSWindowDelegate {
         guard dragged else { return }
         switch grabbed {
         case .box, .resize:
-            snapToSurface()
+            perch.snapToSurface(within: 40)
         case let .pet(resident, lift, true):
             let fall = sqrt(2 * lift / 9.8)
             let drop = SCNAction.moveBy(x: 0, y: -lift, z: 0, duration: fall)

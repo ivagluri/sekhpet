@@ -2,9 +2,9 @@
 armature-only animated USDZ per action, and a clips.json catalog.
 
   Blender --background work/<pal>/blender/<Pal>.blend --python-exit-code 1 \
-      --python scripts/export_realtime.py -- --pal <Pal> [--anims <Base>]
+      --python pipeline/export_realtime.py -- --pal <Pal> [--anims <Base>]
 
-Reads work/<pal>/clip-config.json (scripts/make_pal_config.py) and writes the pack to
+Reads work/<pal>/clip-config.json (sources/palworld/make_pal_config.py) and writes the pack to
 work/<pal>/realtime/.
 """
 import bpy
@@ -19,7 +19,7 @@ from mathutils import Vector
 from bpy_extras import anim_utils
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'scripts'))
+sys.path.insert(0, str(ROOT / 'pipeline'))
 import pack_limits  # noqa: E402
 ARGS = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 PAL = ARGS[ARGS.index('--pal') + 1]

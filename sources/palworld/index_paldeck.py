@@ -1,7 +1,7 @@
 """Index the paldeck from the decoded game tables: work/tables/paldeck.json, which the
 config generator reads for display names. make_pet.sh runs it after decoding the tables.
 
-  python3 scripts/index_paldeck.py --print   # every pal: number, name, internal name, model
+  python3 sources/palworld/index_paldeck.py --print   # every pal: number, name, internal name, model
 
 Reads work/tables/tables.json (DT_PalMonsterParameter and the English
 DT_PalNameText_Common) and work/tables/paklist.txt (the archive listing).
@@ -11,7 +11,7 @@ import re
 import sys
 from pathlib import Path
 
-TABLES = Path(__file__).resolve().parents[1] / 'work/tables'
+TABLES = Path(__file__).resolve().parents[2] / 'work/tables'
 
 data = json.loads((TABLES / 'tables.json').read_text())
 names = next(v for k, v in data.items() if 'NameText' in k)[0]['Rows']

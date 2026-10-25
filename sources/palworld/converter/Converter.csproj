@@ -6,6 +6,6 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../.tools/CUE4Parse/CUE4Parse-Conversion/CUE4Parse-Conversion.csproj" />
+    <ProjectReference Include="../../../.tools/CUE4Parse/CUE4Parse-Conversion/CUE4Parse-Conversion.csproj" />
   </ItemGroup>
 </Project>

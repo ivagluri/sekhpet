@@ -1,23 +1,23 @@
 #!/bin/bash
-# Turn pals extracted with scripts/extract_pal.py into installed desktop pets.
-#   bash scripts/make_pet.sh KingWhale-extract.zip [more zips...]
-#   bash scripts/make_pet.sh KingWhale            re-run a pal already in work/ (e.g. after editing overrides)
+# Turn pals extracted with sources/palworld/extract_pal.py into installed desktop pets.
+#   bash sources/palworld/make_pet.sh KingWhale-extract.zip [more zips...]
+#   bash sources/palworld/make_pet.sh KingWhale            re-run a pal already in work/ (e.g. after editing overrides)
 # Each pal works in work/<pal>/ and is installed into the pets folder; the running app
 # shows it in the Pets window. Steps whose output exists are skipped, so a failed run
-# resumes; delete work/<pal>/ to start a pal over. Needs: scripts/setup_tools.sh run once,
+# resumes; delete work/<pal>/ to start a pal over. Needs: sources/palworld/setup_tools.sh run once,
 # Blender (BLENDER=/path/to/Blender to override), and python3 with Pillow.
 set -uo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 BLENDER="${BLENDER:-/Applications/Blender.app/Contents/MacOS/Blender}"
 APP_BIN=app/SekhPet/.build/release/SekhPet
 LIBRARY="${SEKHPET_PETS:-$HOME/Library/Application Support/SekhPet/Pets}"
 export DOTNET_CLI_HOME="$ROOT/.tools/dotnet-home" NUGET_PACKAGES="$ROOT/.tools/nuget" DOTNET_CLI_TELEMETRY_OPTOUT=1
-CONVERTER=(.tools/dotnet/dotnet tools/converter/bin/Release/net10.0/Converter.dll)
+CONVERTER=(.tools/dotnet/dotnet sources/palworld/converter/bin/Release/net10.0/Converter.dll)
 MAPPINGS=.tools/Palworld-Mappings.usmap
 
 [ $# -gt 0 ] || { sed -n '2,7p' "$0"; exit 2; }
-[ -x .tools/dotnet/dotnet ] && [ -f "${CONVERTER[1]}" ] || { echo "Run scripts/setup_tools.sh first." >&2; exit 1; }
+[ -x .tools/dotnet/dotnet ] && [ -f "${CONVERTER[1]}" ] || { echo "Run sources/palworld/setup_tools.sh first." >&2; exit 1; }
 [ -x "$BLENDER" ] || { echo "Blender not found at $BLENDER; set BLENDER." >&2; exit 1; }
 # The first Python with Pillow (the contact sheets need it).
 PY=""
@@ -73,7 +73,7 @@ EOF
     "${CONVERTER[@]}" work/tables/tables work/tables/tables.json "$MAPPINGS" --inspect \
       Pal/Content/Pal/DataTable/Character/DT_PalMonsterParameter.uasset \
       Pal/Content/L10N/en/Pal/DataTable/Text/DT_PalNameText_Common.uasset | tail -1
-    "$PY" scripts/index_paldeck.py || return 1
+    "$PY" sources/palworld/index_paldeck.py || return 1
   fi
 
   if [ ! -f "$BASE/converted/conversion-report.json" ]; then
@@ -83,33 +83,33 @@ EOF
 
   if [ ! -f "$BASE/blender/$PAL.blend" ]; then
     step blender import
-    blender --factory-startup --python-exit-code 1 --python scripts/build_blender.py -- "${ARGS[@]}" \
+    blender --factory-startup --python-exit-code 1 --python sources/palworld/build_blender.py -- "${ARGS[@]}" \
       | grep -E "BLENDER_IMPORT_OK|Error|Traceback"
     [ -f "$BASE/blender/$PAL.blend" ] || { echo "Blender import failed" >&2; return 1; }
   fi
 
   if [ ! -f "$BASE/probe.json" ]; then
     step probe
-    blender "$BASE/blender/$PAL.blend" --python-exit-code 1 --python scripts/probe_pal.py -- "${ARGS[@]}" \
+    blender "$BASE/blender/$PAL.blend" --python-exit-code 1 --python pipeline/probe_pal.py -- "${ARGS[@]}" \
       | grep -E "PROBE_OK|Error|Traceback"
   fi
 
   export_pack() {
-    "$PY" scripts/make_pal_config.py "$PAL" "${ARGS[@]:2}" || return 1
-    blender "$BASE/blender/$PAL.blend" --python-exit-code 1 --python scripts/export_realtime.py -- "${ARGS[@]}" \
+    "$PY" sources/palworld/make_pal_config.py "$PAL" "${ARGS[@]:2}" || return 1
+    blender "$BASE/blender/$PAL.blend" --python-exit-code 1 --python pipeline/export_realtime.py -- "${ARGS[@]}" \
       | grep -E "^wrote|^FIT|^texture|WARNING|rejected|Error|Traceback"
   }
   step configure and export
   export_pack || return 1
   # Clips still far too big after fitting are dropped and the pack re-exported until it settles.
   for _ in 1 2 3; do
-    "$PY" scripts/check_pack.py "$PAL" --bounds-only && break
+    "$PY" pipeline/check_pack.py "$PAL" --bounds-only && break
     step re-export after dropping oversized clips
     export_pack || return 1
   done
 
   step behavior check
-  "$PY" scripts/check_pack.py "$PAL" || return 1
+  "$PY" pipeline/check_pack.py "$PAL" || return 1
 
   step install
   local PACK="$BASE/realtime"

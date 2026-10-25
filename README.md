@@ -1,6 +1,6 @@
 # SekhPet
 
-A macOS menu-bar app that puts 3D desktop pets on your screen, plus a pipeline that turns Palworld pals from your own copy of the game into pets.
+A macOS menu-bar app that puts 3D desktop pets on your screen, plus a pipeline that turns characters into pets: Palworld pals from your own copy of the game, any rigged 3D character you have as glTF or FBX, or a 2D character's sprite images.
 
 <p align="center">
   <img src="docs/demo1.gif" alt="SekhPet demo: a pal on the desktop" width="420">
@@ -9,25 +9,37 @@ A macOS menu-bar app that puts 3D desktop pets on your screen, plus a pipeline t
 
 Pets idle, wander along the bottom of the screen, play their game animations as random "surprises", watch your cursor, and react when you click, double-click or drag them. Up to eight can be out at once, each at its in-game relative size.
 
-**No game assets are included.** This repository is only the engine and the conversion tools. To make pets you need your own installed copy of Palworld, and the packs you make are built from the game's assets, so keep them to yourself. Not affiliated with or endorsed by Pocketpair.
+**No game assets are included.** This repository is only the engine and the conversion tools. To make pets you need your own source material (for pals, your own installed copy of Palworld), and packs built from someone else's art are theirs, so keep them to yourself. Not affiliated with or endorsed by Pocketpair.
 
 ## Requirements
 
 - **Mac:** macOS 15 or later, Xcode command-line tools (Swift 6), [Blender](https://www.blender.org) 5.x, and Python 3 with [Pillow](https://pypi.org/project/pillow/) (`python3 -m pip install Pillow`).
 - **The machine with the game (Windows or Linux):** Python 3.9 or later. The extractor downloads [repak](https://github.com/trumank/repak) to read the game's `.pak` file.
 
-## Quick start
+## Making pets
+
+Each kind of source has its own folder in `sources/`, with a README and one script that takes it to an installed pet; they all finish with the shared steps in `pipeline/` (export, check, install).
+
+| Source | You have | Run |
+|---|---|---|
+| [`sources/palworld/`](PIPELINE.md) | Palworld installed | `bash sources/palworld/make_pet.sh <Pal>-extract.zip` (below) |
+| [`sources/rigged/`](sources/rigged/README.md) | a rigged character with animations, as glTF/GLB or FBX | `bash sources/rigged/make_rigged_pet.sh characters/<name>` |
+| [`sources/sprites/`](sources/sprites/README.md) | a 2D character's sprite images (GIF, PNG or WebP) | `bash sources/sprites/make_sprite_pet.sh characters/<name>` |
+
+For the last two, a character is a folder (in `characters/`, ignored by git, or anywhere) holding a `character.json` that says what to use and a `clip-config.json` for the pet's behaviour. Sprite pets are paper cut-outs: flat cards that turn and slant like the rest.
+
+## Quick start (Palworld)
 
 On the Mac, once:
 
 ```sh
-bash scripts/setup_tools.sh          # .NET, CUE4Parse, UEFormat and the Palworld type mappings, into .tools/
+bash sources/palworld/setup_tools.sh          # .NET, CUE4Parse, UEFormat and the Palworld type mappings, into .tools/
 bash scripts/build_app.sh --install  # builds SekhPet.app into /Applications
 ```
 
 Once you've made a pet, `bash scripts/build_app.sh --install --icon-pet <Pal>` rebuilds the app with an icon rendered from it.
 
-On the machine with the game, copy `scripts/extract_pal.py` there and run:
+On the machine with the game, copy `sources/palworld/extract_pal.py` there and run:
 
 ```sh
 python3 extract_pal.py --list        # internal names, e.g. KingWhale is Panthalus
@@ -37,10 +49,10 @@ python3 extract_pal.py KingWhale     # writes KingWhale-extract.zip
 It finds the usual Steam install; otherwise pass `--pak <path to Pal-Windows.pak>`. Copy the zip to the Mac, then:
 
 ```sh
-bash scripts/make_pet.sh KingWhale-extract.zip    # several zips at once is fine
+bash sources/palworld/make_pet.sh KingWhale-extract.zip    # several zips at once is fine
 ```
 
-This converts the pal, builds and checks the pack, and installs it. Open the app's paw menu, **Choose Pets…**, and switch the pal on. After the first pal, `python3 scripts/index_paldeck.py --print` lists every pal's display name next to its internal name.
+This converts the pal, builds and checks the pack, and installs it. Open the app's paw menu, **Choose Pets…**, and switch the pal on. After the first pal, `python3 sources/palworld/index_paldeck.py --print` lists every pal's display name next to its internal name.
 
 Building one pal takes about a minute, more for large ones. Review `work/<pal>/check-sheet.png`, which shows ten moments of a scripted test run; [PIPELINE.md](PIPELINE.md) says what to look for.
 
@@ -75,17 +87,21 @@ The app is ad-hoc signed, so on another Mac macOS blocks the first launch. Open 
 ## Docs
 
 - [PIPELINE.md](PIPELINE.md): how a pal becomes a pet, the rules the config generator follows, per-pal overrides, and known problems with their fixes.
-- [PET_PACKS.md](PET_PACKS.md): the pack format the app loads. Packs don't have to come from Palworld; anything that produces this format works.
+- [sources/rigged/README.md](sources/rigged/README.md) and [sources/sprites/README.md](sources/sprites/README.md): the other sources.
+- [PET_PACKS.md](PET_PACKS.md): the pack format the app loads. Anything that produces this format works.
 
 ## Layout
 
 | Path | What |
 |---|---|
 | `app/SekhPet/` | The app (Swift, SceneKit). `swift build` works on its own. |
-| `scripts/` | The pipeline: `extract_pal.py` (game machine), `make_pet.sh` (Mac) and the steps it runs. |
-| `tools/converter/` | A small CUE4Parse program that converts cooked game packages to meshes, animations and textures. |
-| `overrides/` | Optional hand fixes per pal, merged over the generated config. |
-| `work/` | Everything generated per pal (ignored by git). |
+| `scripts/` | Building the app: `build_app.sh`, and `make_icon.py` for its icon. |
+| `pipeline/` | The steps every source finishes with: measure a Blender file's clips, export the pack, check it in the app's offscreen test, install it (`finish.sh`). |
+| `sources/palworld/` | Palworld: `extract_pal.py` (game machine), `make_pet.sh` (Mac) and the steps it runs; `converter/`, a small CUE4Parse program for the game's packages; `overrides/`, optional hand fixes per pal. |
+| `sources/rigged/` | Rigged glTF/GLB or FBX characters: import, clips, props, bone pruning. |
+| `sources/sprites/` | Sprite images to paper cut-out pets. |
+| `characters/` | Your characters for the rigged and sprite sources (ignored by git). |
+| `work/` | Everything generated per pet (ignored by git). |
 | `.tools/` | Downloaded tools (ignored by git). |
 
 ## License

@@ -1,7 +1,7 @@
 """Apply the single macOS output-path compatibility fix to pinned CUE4Parse."""
 from pathlib import Path
 
-root = Path(__file__).resolve().parents[1]
+root = Path(__file__).resolve().parents[2]
 path = root / '.tools/CUE4Parse/CUE4Parse-Conversion/ExportSession.cs'
 source = path.read_text(encoding='utf-8-sig')
 old = "return fullPath.Replace('/', '\\\\');"

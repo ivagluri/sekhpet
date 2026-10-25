@@ -4,10 +4,10 @@ Two machines: the one with the game (Windows or Linux) only extracts, and the Ma
 
 ```sh
 python3 extract_pal.py <Pal>                  # game machine -> <Pal>-extract.zip
-bash scripts/make_pet.sh <Pal>-extract.zip    # Mac -> work/<pal>/, installed pet
+bash sources/palworld/make_pet.sh <Pal>-extract.zip    # Mac -> work/<pal>/, installed pet
 ```
 
-To re-run a pal already in `work/`, after editing its overrides or updating the scripts, give its name instead of a zip: `bash scripts/make_pet.sh <Pal>`.
+To re-run a pal already in `work/`, after editing its overrides or updating the scripts, give its name instead of a zip: `bash sources/palworld/make_pet.sh <Pal>`.
 
 `<Pal>` is the internal name, as in the model `SK_<Pal>` (`extract_pal.py --list` prints them all). Variants that share their base pal's animations (`CatMage_Fire` uses `CatMage`'s) are recognised from the name; `--anims <Base>` overrides that.
 
@@ -25,12 +25,12 @@ Each step is skipped when its output exists, so a failed run resumes. Delete a s
 |---|---|---|---|
 | 1 | Unzip and verify checksums; game tables go to `work/tables/` | (inline) | `raw/`, `manifest.json` |
 | 2 | Decode the game tables (first pal, or when a newer zip brings them) | converter `--inspect`, `index_paldeck.py` | `work/tables/tables.json`, `paldeck.json` |
-| 3 | Convert cooked packages to UEFormat meshes and animations, PNG textures and material JSON | `tools/converter` | `converted/` |
+| 3 | Convert cooked packages to UEFormat meshes and animations, PNG textures and material JSON | `sources/palworld/converter` | `converted/` |
 | 4 | Blender import: mesh, rig, materials, one action per clip, standard clip names | `build_blender.py` | `blender/<Pal>.blend` |
 | 5 | Probe each clip: duration, root travel, pelvis lift, additive type; idle height | `probe_pal.py` | `probe.json` |
-| 6 | Generate the behavior config (rules below), merged with `overrides/<pal>.json` | `make_pal_config.py` | `clip-config.json` |
+| 6 | Generate the behavior config (rules below), merged with `sources/palworld/overrides/<pal>.json` | `make_pal_config.py` | `clip-config.json` |
 | 7 | Export the pack: model USDZ (textures at most 1024 px), one USDZ per clip, `clips.json` | `export_realtime.py` | `realtime/` |
-| 8 | Bounds check: drop clips still far too big after fitting, then re-export (up to 3 rounds) | `check_pack.py --bounds-only` | `overrides/<pal>.json` |
+| 8 | Bounds check: drop clips still far too big after fitting, then re-export (up to 3 rounds) | `check_pack.py --bounds-only` | `sources/palworld/overrides/<pal>.json` |
 | 9 | Behavior test: a scripted offscreen run, and a contact sheet | `check_pack.py` | `check/`, `check-sheet.png` |
 | 10 | Thumbnail, then install into the pets folder | the app's `--icon` mode | `realtime/thumbnail.png` |
 
@@ -67,14 +67,14 @@ Also skim the output for the size line (`game … -> shown …`), `rejected` str
 - **Root travel:** clips whose root bone travels more than 0.3 m are stripped in place and replayed by moving the window, scaled to at most 1.5 m.
 - **Pelvis launches:** a lift above max(1 m, half the pal's height) is capped at 0.4 × height. `Getup*` clips with a big lift are excluded instead (capping them sinks the body into the floor).
 - **Reactions:** click plays Petting (87%) or Damage (13%). Double-click plays the first standalone `Skill_*` clip of 0.8–4 s, otherwise Encount. Dragging holds the Jump group's loop and letting go plays its landing.
-- **Oversized clips** (limits in `scripts/pack_limits.py`): a clip that rises above 1.6× the idle height, sinks below 0.35× it, or reaches sideways beyond the larger of 1.25× the height and 1.2× the idle reach is fitted, not dropped.
+- **Oversized clips** (limits in `pipeline/pack_limits.py`): a clip that rises above 1.6× the idle height, sinks below 0.35× it, or reaches sideways beyond the larger of 1.25× the height and 1.2× the idle reach is fitted, not dropped.
   - The exporter squashes the root and pelvis travel (up, down and sideways separately) until the clip fits. Then it lifts the body on any frame whose pose still dips below the sink limit, so a nose-first dive bobs at floor level. Pose and timing are untouched.
   - Sinks are always fitted. Rises and sweeps are fitted only when more than 10% over, and a squash is undone if it removed less than half the excess: that size comes from the pose (rearing up, spread wings), not travel, and the window grows instead.
   - The output shows `FIT <clip>: up x…, down x…, sideways x…, lifted up to … m`; `clips.json` records `motionFit`.
 - **Exclusions:** additive clips (Hit), the Carrying clip (a flop onto the side), and the rare clip whose pose alone is still 1.6× past a limit after fitting.
 - **Speed:** see problem 8 below.
 
-**Overrides:** hand fixes go in `overrides/<pal>.json`, merged over the generated config: dicts merge, lists replace, `exclude` accumulates, and `null` removes a key (`"locomotion": {"Sprint": null}` drops a gait). `allowLarge` keeps clips the bounds check would drop. A fully hand-made `work/<pal>/clip-config.json` also works: the generator keeps any config it didn't write.
+**Overrides:** hand fixes go in `sources/palworld/overrides/<pal>.json`, merged over the generated config: dicts merge, lists replace, `exclude` accumulates, and `null` removes a key (`"locomotion": {"Sprint": null}` drops a gait). `allowLarge` keeps clips the bounds check would drop. A fully hand-made `work/<pal>/clip-config.json` also works: the generator keeps any config it didn't write.
 
 ## Problems met, and their fixes
 
@@ -108,13 +108,15 @@ Also skim the output for the size line (`game … -> shown …`), `rejected` str
 
    ```sh
    export DOTNET_CLI_HOME=$PWD/.tools/dotnet-home NUGET_PACKAGES=$PWD/.tools/nuget
-   .tools/dotnet/dotnet tools/converter/bin/Release/net10.0/Converter.dll work/nightlady/raw /tmp/bp.json \
+   .tools/dotnet/dotnet sources/palworld/converter/bin/Release/net10.0/Converter.dll work/nightlady/raw /tmp/bp.json \
      .tools/Palworld-Mappings.usmap --inspect Pal/Content/Pal/Blueprint/Character/Monster/PalActorBP/NightLady/BP_NightLady_Dark.uasset
    ```
 
    In `/tmp/bp.json`, the `CharacterMesh0` export's `SkeletalMesh` names the mesh, and `RelativeScale3D` its scale (1 if absent).
-2. Write `overrides/<mesh lowercased>.json` with `{"displayName": "<paldeck name>"}`.
+2. Write `sources/palworld/overrides/<mesh lowercased>.json` with `{"displayName": "<paldeck name>"}`.
 3. Extract and build under the mesh's name: `python3 extract_pal.py NightLady_Pink --anims NightLady`, then `make_pet.sh` as usual.
+
+The mesh can also sit in the base pal's own folder (Lyleen Noct's `SK_LilyQueen_Ice` is in `LilyQueen/`, beside `SK_LilyQueen`); look there and for its textures when the blueprint isn't in the base pal's extraction. The same three steps work: the extractor and converter find the mesh wherever its folder is.
 
 If the blueprint keeps the base mesh and only swaps materials (`OverrideMaterials`), the pipeline can't express that yet.
 
@@ -123,4 +125,4 @@ If the blueprint keeps the base mesh and only swaps materials (`OverrideMaterial
 - **Effects** (flames, clouds, sparkles) are flat solid colours, not translucent or gradient.
 - **Size clamp:** pals outside 1.2–2.4 m lose their true relative size.
 - **Odd surprises** such as swim idles on dry land stay in the pool; exclude them in the overrides.
-- **Game updates** can change the archive, the type mappings or the tables. Re-extract, and update the mappings pin in `tools/tool-versions.json` if conversion starts failing.
+- **Game updates** can change the archive, the type mappings or the tables. Re-extract, and update the mappings pin in `sources/palworld/tool-versions.json` if conversion starts failing.

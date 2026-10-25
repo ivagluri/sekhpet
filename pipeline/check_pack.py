@@ -1,11 +1,11 @@
 """Check an exported pal pack, then run it through the app's offscreen test.
 
-  python3 scripts/check_pack.py <Pal> [--bounds-only]
+  python3 pipeline/check_pack.py <Pal> [--bounds-only]
 
 1. Bounds: the exporter already squashed the body motion of oversized clips
-   (scripts/pack_limits.py). A surprise clip whose pose alone still exceeds the limits
+   (pipeline/pack_limits.py). A surprise clip whose pose alone still exceeds the limits
    by `DROP_FACTOR` would blow up the window, so it is added to
-   overrides/<pal>.json `exclude`. Exits 3 when it added any (re-export).
+   sources/palworld/overrides/<pal>.json `exclude`. Exits 3 when it added any (re-export).
 2. Behavior: runs `SekhPet --snapshot` with scripted input (click, double-click,
    drag/drop, cursor watching, a group and a trip) and checks that each one started.
 3. Writes work/<pal>/check-sheet.png, a contact sheet for visual review.
@@ -34,7 +34,7 @@ for entry in catalog['surprisePool']:
     if entry.get('group'):
         g = catalog['groups'][entry['group']]
         pool |= set(g['start'] + [g['loop']] + g['end'])
-override_path = ROOT / 'overrides' / f'{pal.lower()}.json'
+override_path = ROOT / 'sources/palworld/overrides' / f'{pal.lower()}.json'
 allowed = set(json.loads(override_path.read_text()).get('allowLarge', [])) if override_path.exists() else set()
 limit = pack_limits.limits(clips['Idle']['bounds'])
 outliers = {}

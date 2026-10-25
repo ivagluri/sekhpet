@@ -1,6 +1,6 @@
 #!/bin/bash
 # Build SekhPet.app: a menu-bar-only (LSUIElement) app. It ships without pets; they live
-# in ~/Library/Application Support/SekhPet/Pets/<name>/ (scripts/make_pet.sh installs them).
+# in ~/Library/Application Support/SekhPet/Pets/<name>/ (sources/palworld/make_pet.sh installs them).
 #   bash scripts/build_app.sh                    build app/build/SekhPet.app
 #   bash scripts/build_app.sh --install          also replace /Applications/SekhPet.app
 #   bash scripts/build_app.sh --icon AppIcon.icns  use your own app icon (optional)

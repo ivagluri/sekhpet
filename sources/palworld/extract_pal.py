@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Extract one pal from your Palworld install, on the machine where the game is
-installed (Windows or Linux). Writes <Pal>-extract.zip for scripts/make_pet.sh on the Mac.
+installed (Windows or Linux). Writes <Pal>-extract.zip for sources/palworld/make_pet.sh on the Mac.
 
   python3 extract_pal.py --list                 # internal names of every pal with a model
   python3 extract_pal.py KingWhale              # Panthalus
@@ -113,8 +113,10 @@ def main():
 
     listing = run('list', str(pak)).splitlines()
     all_paths = set(listing)
+    # SK_<name> in its own folder, or (some variants, such as Lyleen Noct's LilyQueen_Ice) in
+    # its base pal's.
     models = sorted({m.group(1) for p in listing
-                     if (m := re.match(MONSTER.format('Model') + r'([^/]+)/SK_\1\.uasset$', p))})
+                     if (m := re.match(MONSTER.format('Model') + r'[^/]+/SK_([^/]+)\.uasset$', p))})
     anim_sets = {m.group(1) for p in listing if (m := re.match(MONSTER.format('Animation') + r'([^/]+)/AS_', p))}
     if args.list:
         print('\n'.join(models))
@@ -183,7 +185,7 @@ def main():
                     if file.is_file():
                         bundle.write(file, f'{root.name}/{file.relative_to(root).as_posix()}')
     print(f'Wrote {zip_path} ({len(selected)} files; animations from {anims}). Copy it to the Mac and run '
-          f'scripts/make_pet.sh on it.')
+          f'sources/palworld/make_pet.sh on it.')
 
 
 if __name__ == '__main__':

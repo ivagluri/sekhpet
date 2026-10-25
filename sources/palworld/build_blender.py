@@ -7,7 +7,7 @@ from pathlib import Path
 from mathutils import Vector
 from bpy_extras import anim_utils
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 # Pal name from `-- --pal Name`; its files live in work/<pal>/.
 ARGS = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 PAL = ARGS[ARGS.index('--pal') + 1]

@@ -1,7 +1,7 @@
-"""Measure a pal's imported clips for config generation (scripts/make_pal_config.py).
+"""Measure a pal's imported clips for config generation (sources/palworld/make_pal_config.py).
 
   Blender --background work/<pal>/blender/<Pal>.blend --python-exit-code 1 \
-      --python scripts/probe_pal.py -- --pal <Pal> [--anims <Base>]
+      --python pipeline/probe_pal.py -- --pal <Pal> [--anims <Base>]
 
 Writes work/<pal>/probe.json: per clip duration, root travel, pelvis lift
 and additive type, plus the rig's standing pelvis height and idle extents.

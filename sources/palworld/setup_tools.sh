@@ -1,10 +1,10 @@
 #!/bin/bash
 # One-time setup on the Mac: downloads .NET, the pinned CUE4Parse and UEFormat sources,
-# and the Palworld type mappings into .tools/, then builds tools/converter.
-#   bash scripts/setup_tools.sh
-# Versions and checksums are pinned in tools/tool-versions.json.
+# and the Palworld type mappings into .tools/, then builds sources/palworld/converter.
+#   bash sources/palworld/setup_tools.sh
+# Versions and checksums are pinned in sources/palworld/tool-versions.json.
 set -euo pipefail
-TASK_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+TASK_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$TASK_ROOT"
 mkdir -p .tools
 if [ ! -x .tools/dotnet/dotnet ]; then
@@ -19,7 +19,7 @@ fetch_repo() {
     git -C "$target" checkout --detach "$revision"
   fi
   if [ "$(git -C "$target" rev-parse HEAD)" != "$revision" ]; then
-    echo "Unexpected source revision in $target; preserve local changes and review tools/tool-versions.json." >&2
+    echo "Unexpected source revision in $target; preserve local changes and review sources/palworld/tool-versions.json." >&2
     exit 1
   fi
 }
@@ -33,11 +33,11 @@ fi
 python3 - <<'PY'
 import hashlib,json
 from pathlib import Path
-lock=json.loads(Path('tools/tool-versions.json').read_text())
+lock=json.loads(Path('sources/palworld/tool-versions.json').read_text())
 assert hashlib.sha256(Path('.tools/Palworld-Mappings.usmap').read_bytes()).hexdigest()==lock['palworld_mappings_sha256'], 'Mapping checksum mismatch'
 PY
-python3 scripts/prepare_converter.py
+python3 sources/palworld/prepare_converter.py
 export DOTNET_CLI_HOME="$TASK_ROOT/.tools/dotnet-home" NUGET_PACKAGES="$TASK_ROOT/.tools/nuget"
 export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false
-.tools/dotnet/dotnet build tools/converter/Converter.csproj -c Release -clp:ErrorsOnly
+.tools/dotnet/dotnet build sources/palworld/converter/Converter.csproj -c Release -clp:ErrorsOnly
 echo "Tools ready."

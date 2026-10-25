@@ -1,6 +1,6 @@
 import Foundation
 
-/// Mirror of `clips.json`, written by `scripts/export_realtime.py`.
+/// Mirror of `clips.json`, written by `pipeline/export_realtime.py`.
 /// All lengths are SceneKit metres; the character faces +Z at yaw 0.
 struct Catalog: Decodable {
     enum Facing: String, Decodable {

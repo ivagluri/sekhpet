@@ -1,12 +1,14 @@
 # Generated per pal from your game files: never commit these.
 /work/
+# Your own characters for sources/rigged and sources/sprites (their art isn't ours to share).
+/characters/
 *-extract.zip
 *.blend
 *.blend1
 # Downloaded tools and build output.
 /.tools/
-/tools/converter/bin/
-/tools/converter/obj/
+/sources/palworld/converter/bin/
+/sources/palworld/converter/obj/
 /app/build/
 /app/SekhPet/.build/
 /app/SekhPet/.swiftpm/

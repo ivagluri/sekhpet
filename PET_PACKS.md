@@ -1,6 +1,6 @@
 # Pet packs
 
-A pet is one folder, its **pack**. The app loads every pack in `~/Library/Application Support/SekhPet/Pets/` (also reachable from the Pets window). `scripts/make_pet.sh` writes packs from Palworld, but any source that produces this format works.
+A pet is one folder, its **pack**. The app loads every pack in `~/Library/Application Support/SekhPet/Pets/` (also reachable from the Pets window). The scripts in `sources/` write packs from Palworld, rigged glTF/FBX characters and sprite images, but anything that produces this format works.
 
 ```
 kingwhale/

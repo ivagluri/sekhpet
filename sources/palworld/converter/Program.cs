@@ -12,7 +12,7 @@ using CUE4Parse.MappingsProvider.Usmap;
 using Newtonsoft.Json;
 using Serilog;
 
-// Converter <raw> <output> <mappings> <Pal> [AnimSet]   (scripts/make_pet.sh runs it)
+// Converter <raw> <output> <mappings> <Pal> [AnimSet]   (sources/palworld/make_pet.sh runs it)
 if (args.Length < 4)
 {
     Console.Error.WriteLine("usage: Converter <raw dir> <output dir> <mappings.usmap> <Pal> [AnimSet]\n" +
@@ -52,8 +52,12 @@ if (args.Length > 4 && args[3] == "--inspect")
 var session = new ExportSession { MaxDegreeOfParallelism = 1 };
 var catalog = new List<object>();
 var failures = new List<object>();
+// The mesh's own folder, which for some variants is its base pal's (SK_LilyQueen_Ice is in LilyQueen/).
+var meshFile = files.Keys.FirstOrDefault(p => p.EndsWith($"/Model/Character/Monster/{pal}/SK_{pal}.uasset"))
+    ?? files.Keys.FirstOrDefault(p => p.Contains("/Model/Character/Monster/") && p.EndsWith($"/SK_{pal}.uasset"));
+var modelFolder = meshFile?[..(meshFile.LastIndexOf('/') + 1)] ?? $"/Model/Character/Monster/{pal}/";
 foreach (var path in files.Keys.Where(p => p.EndsWith(".uasset") &&
-    (p.Contains($"/Model/Character/Monster/{pal}/") || p.Contains($"/Animation/Character/Monster/{animSet}/"))).Order())
+    (p.Contains(modelFolder) || p.Contains($"/Animation/Character/Monster/{animSet}/"))).Order())
 {
     try
     {

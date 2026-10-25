@@ -35,6 +35,8 @@ final class PetHouse: NSObject, NSWindowDelegate {
     private var lastFrame: TimeInterval?
     private var userPaused = false
     private var hidden = false
+    /// Why the house is away like a pet: the screens asleep or the session locked.
+    private var awayReasons: Set<PetController.PauseReason> = []
     private var grabbed: Grab?
     private var throwSamples: [(position: SCNVector3, time: TimeInterval)] = []
     private var occlusionObserver: NSObjectProtocol?
@@ -171,9 +173,18 @@ final class PetHouse: NSObject, NSWindowDelegate {
         applyPaused()
     }
 
-    /// The physics and the room's animations stop with Pause All, or while the window can't be seen.
+    /// Like a pet's: asleep or locked, other apps' windows can leave the window list, and
+    /// waking or unlocking zooms them out and back in. Ride it rather than fall.
+    func setAway(_ away: Bool, _ reason: PetController.PauseReason) {
+        if away { awayReasons.insert(reason) } else { awayReasons.remove(reason) }
+        overviewUntil = CACurrentMediaTime() + 2
+        applyPaused()
+    }
+
+    /// The physics and the room's animations stop with Pause All, while the window can't be
+    /// seen, and while the screens sleep or are locked.
     private func applyPaused() {
-        scene.isPaused = userPaused || hidden
+        scene.isPaused = userPaused || hidden || !awayReasons.isEmpty
         for resident in residents { resident.pet.setPaused(hidden, .occluded) }
     }
 
@@ -383,7 +394,7 @@ final class PetHouse: NSObject, NSWindowDelegate {
     private var nextReturnCheck: TimeInterval = 0
     private var perchMovedAt: TimeInterval = 0
     private var lastSeenFrame = NSRect.zero
-    /// Until then, window changes come from Mission Control or Show Desktop.
+    /// Until then, window changes come from Mission Control, Show Desktop, or the screens waking or unlocking.
     private var overviewUntil: TimeInterval = 0
     private static let gravity: CGFloat = 2500
 
@@ -399,7 +410,9 @@ final class PetHouse: NSObject, NSWindowDelegate {
     /// Like a pet's: a box whose feet aren't on any screen (saved mid-move, or left behind by
     /// a display that went away) drops onto the bottom of the nearest one.
     private func returnIfOffScreen(at now: TimeInterval) {
-        guard now >= nextOnScreenCheck, !movingBox, jump == nil, let base else { return }
+        // Not while the screens sleep, are locked or have just come back, when they can be missing from the list.
+        guard now >= nextOnScreenCheck, now >= overviewUntil, awayReasons.isEmpty,
+              !movingBox, jump == nil, let base else { return }
         nextOnScreenCheck = now + 1
         let frame = window.frame
         let feet = NSPoint(x: frame.minX + base.midX, y: frame.minY + base.y)
@@ -512,7 +525,8 @@ final class PetHouse: NSObject, NSWindowDelegate {
         }
         nextPerchCheck = now - perchMovedAt < 0.5 ? now : ((now * 10).rounded(.down) + 1) / 10
         guard let seen else {
-            if canFall { fallOff(rememberingWindow: true, at: now) }
+            // Locked, other apps' windows leave the list, and come back a moment after unlocking.
+            if canFall, now >= overviewUntil { fallOff(rememberingWindow: true, at: now) }
             return
         }
         let frame = window.frame

@@ -268,29 +268,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         let workspace = NSWorkspace.shared.notificationCenter
+        let away = { [weak self] (on: Bool, reason: PetController.PauseReason) in
+            for pet in self?.pets ?? [] { pet.setPaused(on, reason) }
+            self?.house?.setAway(on, reason)
+        }
         for (name, asleep) in [(NSWorkspace.screensDidSleepNotification, true), (NSWorkspace.screensDidWakeNotification, false)] {
-            workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    for pet in self?.pets ?? [] { pet.setPaused(asleep, .screensAsleep) }
-                }
+            workspace.addObserver(forName: name, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { away(asleep, .screensAsleep) }
             }
         }
         // Locked or switched away from, other apps' windows leave the window list: perched pets
         // would take their window for closed.
         let distributed = DistributedNotificationCenter.default()
         for (name, locked) in [("com.apple.screenIsLocked", true), ("com.apple.screenIsUnlocked", false)] {
-            distributed.addObserver(forName: Notification.Name(name), object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    for pet in self?.pets ?? [] { pet.setPaused(locked, .locked) }
-                }
+            distributed.addObserver(forName: Notification.Name(name), object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { away(locked, .locked) }
             }
         }
-        for (name, away) in [(NSWorkspace.sessionDidResignActiveNotification, true),
+        for (name, gone) in [(NSWorkspace.sessionDidResignActiveNotification, true),
                              (NSWorkspace.sessionDidBecomeActiveNotification, false)] {
-            workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    for pet in self?.pets ?? [] { pet.setPaused(away, .locked) }
-                }
+            workspace.addObserver(forName: name, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { away(gone, .locked) }
             }
         }
     }

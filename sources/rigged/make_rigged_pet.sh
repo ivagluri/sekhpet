@@ -22,6 +22,8 @@ rm -rf "$BASE/blender" "$BASE/probe.json" "$BASE/realtime"
 blender --factory-startup --python-exit-code 1 --python sources/rigged/import_model.py -- "$SPEC" | grep -E "^ANIM|IMPORT_OK|WARNING|Error|Traceback|no bone|glTF/GLB"
 run sources/rigged/compose.py -- "$SPEC" | grep -E "^CLIP|centred|COMPOSE_OK|Error|Traceback|no animation"
 run sources/rigged/props.py -- "$SPEC" | grep -E "^PROP|PROPS_OK|Error|Traceback"
+run sources/rigged/cloth_follow.py -- "$SPEC/character.json" | grep -E "CLOTH_FOLLOW_OK|Error|Traceback"
+run sources/rigged/cloth_drape.py -- "$SPEC/character.json" | grep -E "CLOTH_DRAPE_OK|Error|Traceback"
 # Only the bones the clips move go into the pack, plus the feet and look bones the config names.
 read -r -a NAMED <<< "$(field "$SPEC/clip-config.json" feet) $(field "$SPEC/clip-config.json" lookBones)"
 run sources/rigged/prune_bones.py -- ${NAMED[@]+"${NAMED[@]}"} | grep -E "PRUNE_OK|Error|Traceback"

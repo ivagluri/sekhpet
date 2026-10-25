@@ -11,6 +11,7 @@ import bpy
 import json
 import sys
 import math
+import numpy as np
 import re
 import shutil
 import tempfile
@@ -368,20 +369,25 @@ def hold_scales(action):
 
 
 def measure_bounds(action):
+    """The mesh's extent over the clip in SceneKit metres, sampled every BOUNDS_STEP frames.
+    Works on all vertices at once with NumPy: identical results, about 20x faster on a
+    100k-vertex mesh than a Python loop (pipeline/BOUNDS_PERFORMANCE.md)."""
     use_action(action)
-    lo = Vector((math.inf,) * 3)
-    hi = Vector((-math.inf,) * 3)
-    radius = 0.0
+    low, high, radius = np.full(3, math.inf), np.full(3, -math.inf), 0.0
     frames = list(range(1, last_frame(action) + 1, BOUNDS_STEP)) + [last_frame(action)]
     for frame in frames:
         scene.frame_set(frame)
         evaluated = mesh.evaluated_get(bpy.context.evaluated_depsgraph_get())
-        world = evaluated.matrix_world
-        for vertex in evaluated.data.vertices:
-            p = to_scenekit(world @ vertex.co)
-            lo = Vector(map(min, lo, p))
-            hi = Vector(map(max, hi, p))
-            radius = max(radius, math.hypot(p.x, p.z))
+        assert len(evaluated.data.vertices), 'the evaluated mesh is empty'
+        points = np.empty(len(evaluated.data.vertices) * 3, dtype=np.float32)
+        evaluated.data.vertices.foreach_get('co', points)
+        matrix = np.asarray(evaluated.matrix_world, dtype=np.float32)
+        world = points.reshape(-1, 3) @ matrix[:3, :3].T + matrix[:3, 3]
+        low, high = np.minimum(low, world.min(axis=0)), np.maximum(high, world.max(axis=0))
+        radius = max(radius, float(np.hypot(world[:, 0].astype(np.float64), world[:, 1].astype(np.float64)).max()))
+    # Blender (x, y, z) -> SceneKit (x, z, -y); negating y swaps its minimum and maximum.
+    lo = [float(low[0]), float(low[2]), float(-high[1])]
+    hi = [float(high[0]), float(high[2]), float(-low[1])]
     return {'min': [round(c, 4) for c in lo], 'max': [round(c, 4) for c in hi],
             'horizontalRadius': round(radius, 4)}
 

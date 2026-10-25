@@ -17,6 +17,8 @@ Blender script you can also run on its own, then `pipeline/finish.sh` (export, c
 | `import_model.py` | Imports the model and any extra animation files, joins the meshes, and applies scale and facing. Renames bones, retimes every animation onto 30 fps from frame 1, optionally bakes the colour into one texture, and saves `work/<name>/blender/<Name>.blend`. Prints how far each animation carries the body. |
 | `compose.py` | Makes the pet's clips from the animations: renamed, joined, played in place. Stands the idle on the origin. |
 | `props.py` | Attaches props on their own mount bones, shown only in the clips you choose. |
+| `cloth_follow.py` | Optional: lets a skirt, dress or cape partly follow the thighs, so the legs don't poke through it (`clothFollow`, below). Cheap; for short skirts. |
+| `cloth_drape.py` | Optional: for cloth with bone chains of its own (game physics bones): bakes them hanging under gravity and pushed out of the legs on every frame (`clothDrape`, below). For long dresses and capes. |
 | `prune_bones.py` | Drops the bones no clip moves (face, cloth, helpers), so the clips load fast. |
 | `recenter.py` | Optional: centres lopsided clips (lunges), which would otherwise widen the pet's window. |
 
@@ -63,7 +65,21 @@ characters/hero/
      "location": [0, 0.15, 0], "rotation": [0, 0, 180], "hideIn": ["Attack*"]},
     {"name": "SwordHand", "model": "sword.glb", "bone": "hand_r", "showIn": ["Attack*"]}
   ],
-  "recenter": false                  // optional: centre lopsided side-on clips (export runs twice)
+  "recenter": false,                 // optional: centre lopsided side-on clips (export runs twice)
+  "clothFollow": {                   // optional: cloth whose bones no clip moves (game physics)
+    "groups": ["*Skirt*"],           //   its vertex groups, by name pattern
+    "legs": [["thigh_l", "calf_l"], ["thigh_r", "calf_r"]],  // each side's leg bones from the top
+                                     //   (one thigh bone each does for a short skirt)
+    "waist": 0.1, "hem": 0.95,       //   share of its weight moved to them at the top and the hem
+    "curve": 0.5                     //   below 1 climbs early, so it hangs with the legs when bending
+  },
+  "clothDrape": {                    // optional, instead of clothFollow: cloth with bone chains
+    "chains": ["*Skirt*_Phy"],       //   the chain bones, by name pattern
+    "body": "spine_01",              //   the bone whose tilt the cloth makes up for (the one it hangs from)
+    "hang": [0.5, 1.0],              //   how much of that tilt it undoes at the chain's top and end
+    "colliders": [["thigh_l", "calf_l", 0.085], ["calf_l", "foot_l", 0.06]],  // capsules: bone to bone, radius
+    "margin": 0.01
+  }
 }
 ```
 
@@ -98,7 +114,15 @@ generates it; here you write it. A small one:
 }
 ```
 
-Every clip not used as the idle, a gait or a click becomes a random surprise. Optional extras:
+Every clip not used as the idle, a gait or a click becomes a random surprise. Two choices matter more
+than they look:
+- **The drag loop** (`input.dragGroup`'s loop) plays for as long as the pet is held, so it must be a real
+  loop of a second or more that reads as being held or falling. A short airborne pose from a hop or jump
+  (under half a second) twitches when looped; a held emote (covering the face, flailing) works better.
+- **Idle variants:** a game idle is often very still. List every standing idle and talk idle the
+  character has as `idleVariants`, or the pet looks frozen between surprises.
+
+Optional extras:
 - `groups`: start, loop and end clips that play as one, like a take-off, a glide and a landing.
 - `idleVariants`: clips the idle drifts into now and then.
 - `feet` and `lookBones`: bone names for measuring stride and for watching the cursor.

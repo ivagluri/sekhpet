@@ -9,7 +9,8 @@ optional hand-made overrides in sources/palworld/overrides/<pal>.json, which are
 
 The rules (see PIPELINE.md):
 - Idle and RestNN face the viewer; everything else turns to a directional view.
-- Start/StartLoop/Action/UpLoop/ActionLoop/Loop/DownLoop/End clips are grouped by stem.
+- Start/StartLoop/Action/Action1.../UpLoop/ActionLoop/Loop/DownLoop/End clips are grouped by stem; a group
+  with no loop clip (Start, Action1, Action2, End) plays through once.
 - Walk/Trot/Transport/Run/Sprint (+ swim gaits) become wander travel.
 - Work clips (the blueprint's work actions: CommonWork, Mining, Deforest...) loop.
 - Clips with large planar root travel are stripped and replayed (scaled to <= 1.5 m).
@@ -98,6 +99,10 @@ def split_parts(name):
     in any case and `StemPart` with a capitalised part (LargeDownStart, JumpStart),
     so a word that merely ends in "end" doesn't match."""
     readings = []
+    # Numbered actions chain in order: MoonBlade_Start, _Action1, _Action2, _End is one move.
+    numbered = re.fullmatch(r'(.+)_Action_?(\d+)', name, re.IGNORECASE)
+    if numbered:
+        return [(numbered.group(1), f'Action{int(numbered.group(2)):02d}')]
     for part in sorted(PARTS, key=len, reverse=True):
         match = re.fullmatch(rf'(.+)_({part})', name, re.IGNORECASE) or re.fullmatch(rf'(.{{3,}}?)({part})', name)
         if match and match.group(1) not in ('Idle', 'Run', 'Walk'):
@@ -130,17 +135,29 @@ def find_groups(names):
                 child.setdefault('Action', stem)
             for part, clip in child.items():
                 merged.setdefault(part, clip)
+    # A bare numbered clip beside a group (BrutalMachete_01, Breaching_01) is one of its actions.
+    for stem, parts in stems.items():
+        for name in names:
+            number = re.fullmatch(rf'{re.escape(stem)}_(\d+)', name)
+            if number and name not in parts.values():
+                parts[f'Action{int(number.group(1)):02d}'] = name
     groups = {}
     for stem, parts in stems.items():
         if len(parts) < 2:
             continue
         loop = next((parts[p] for p in ('ActionLoop', 'Loop', 'DownLoop', 'StartLoop') if p in parts), None)
-        start = [parts[p] for p in ('Start', 'StartLoop', 'Action', 'UpLoop') if p in parts and parts[p] != loop]
+        if loop is None and stem in names and stem not in parts.values():
+            loop = stem  # SleepStart, Sleep, SleepEnd: the bare clip is the held part
+        # Actions in number order (Breaching_01 before Breaching_02, whichever way each was found).
+        actions = sorted((parts[p] for p in parts if p == 'Action' or re.fullmatch(r'Action\d+', p)),
+                         key=lambda clip: int(m.group(1)) if (m := re.search(r'(\d+)$', clip)) else 0)
+        start = [clip for clip in [parts.get('Start'), parts.get('StartLoop'), *actions, parts.get('UpLoop')]
+                 if clip and clip != loop]
         end = [parts['End']] if 'End' in parts else []
-        if loop is None:  # Start + End only: play them back to back
-            loop, start = start[-1], start[:-1]
         group = {'start': start, 'loop': loop, 'end': end}
-        if loop.endswith(('DownLoop', 'UpLoop')):
+        if loop is None:  # no loop (Start, actions, End): play them back to back, once
+            group.update(start=start[:-1], loop=start[-1], loopCount=[1, 1])
+        elif loop.endswith(('DownLoop', 'UpLoop')):
             group['loopCount'] = [1, 2]  # a fall or hold, not something to repeat
         elif stem.startswith('Skill') and loop.endswith('Loop'):
             group['loopCount'] = [3, 6]

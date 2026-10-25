@@ -60,6 +60,8 @@ Also skim the output for the size line (`game … -> shown …`), `rejected` str
 - **Groups:** clips are grouped by stem from the suffixes `Start/StartLoop/Action/UpLoop/ActionLoop/Loop/DownLoop/End`. A suffix counts after an underscore (any case) or attached and capitalized (`LargeDownStart`, `JumpStart`), so a word that merely ends in "end" doesn't match.
   - If a name reads two ways (`LargeDownLoop` is `Large`+`DownLoop` or `LargeDown`+`Loop`), the stem its siblings share wins.
   - Numbered sub-stems merge into their parent: `TrickShow_Start` → `TrickShow_01` → `TrickShow_01_Loop` → `TrickShow_01_End` is one group.
+  - Numbered actions chain in number order: `MoonBlade_Start` → `_Action1` → `_Action2` → `_End` is one move, as are `NightmareFlame_Action_01` and bare numbered clips beside a group (`BrutalMachete_01`, `Breaching_01`).
+  - With no loop suffix, a clip named just the stem is the held part (`SleepStart` → `Sleep` → `SleepEnd`); with none at all (a Start, actions, an End), the group plays through once.
   - Falls and holds (`UpLoop`, `DownLoop`) loop 1–2 times and `Skill_*` loops 3–6 times. Other loops repeat until the surprise lasts at least 6 s.
   - The exporter warns about a clip ending in Start/Loop/End that isn't in a group.
 - **Travel:** Walk, Trot, Transport, Run, Sprint, Walk_Swim and Run_Swim become wandering gaits.
@@ -126,3 +128,7 @@ If the blueprint keeps the base mesh and only swaps materials (`OverrideMaterial
 - **Size clamp:** pals outside 1.2–2.4 m lose their true relative size.
 - **Odd surprises** such as swim idles on dry land stay in the pool; exclude them in the overrides.
 - **Game updates** can change the archive, the type mappings or the tables. Re-extract, and update the mappings pin in `sources/palworld/tool-versions.json` if conversion starts failing.
+
+## Bounds measurement performance
+
+The exporter currently measures bounds with a Python loop over each evaluated vertex. A bulk-access/NumPy replacement was validated during the Aerith conversion. [The performance note](pipeline/BOUNDS_PERFORMANCE.md) contains the candidate implementation, cross-source comparisons and measured timings. It preserves the existing frame sampling and bounds rules; the shared exporter has not yet adopted it.

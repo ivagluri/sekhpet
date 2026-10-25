@@ -85,7 +85,7 @@ All **13 clip comparisons** and **four transformed-Idle comparisons** had **zero
 
 “Cold” marks the first NumPy call in a fresh Blender process, including its import overhead.
 
-The read-only benchmark and full JSON results remain in `work/pipeline-tests/benchmark_bounds.py` and `bounds-benchmark-<pet>.json` on the test machine. Those local files reference private generated character inputs and are not distributed with the repository.
+The benchmark was a one-off local script over private generated character files, not kept; the table above is its record. To re-check, time the scalar version against `measure_bounds` on the same loaded action with `time.perf_counter()` and compare all returned bounds.
 
 These are single-pass wall-clock timings for **bounds measurement only**, on this Mac with Blender 5.2.2. They are not an end-to-end pipeline speedup or a universal performance guarantee. The first bulk call in each process includes the initial NumPy import cost; that can outweigh the savings on a very small mesh. Later calls reuse the imported module.
 

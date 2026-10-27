@@ -71,11 +71,12 @@ class _Buffer:
         return len(self.accessors) - 1
 
 
-def write(path, name, positions, colours, skin, triangles, joints, animations):
+def write(path, name, positions, colours, skin, triangles, joints, animations, glow=()):
     """positions: [xyz] per vertex (glTF space, metres); colours: [rgba] per vertex; skin: [[(joint, weight), ...]]
     per vertex; triangles: [(a, b, c)] vertex indices; joints: [(name, parent index or -1, rest matrix)] with
     model-space rest matrices, parents before children; animations: [(name, times, {joint: [matrix per time]})]
-    with model-space matrices (joints left out stay at rest)."""
+    with model-space matrices (joints left out stay at rest). glow: colours (rgba, as in `colours`) whose
+    triangles shine with their own colour (glowing eyes), each through an emissive material of that colour."""
     buf = _Buffer()
     flat_pos, flat_col, flat_j, flat_w = [], [], [], []
     for tri in triangles:
@@ -89,6 +90,19 @@ def write(path, name, positions, colours, skin, triangles, joints, animations):
              "COLOR_0": buf.add("4f", flat_col, "VEC4", 5126, False, 34962),
              "JOINTS_0": buf.add("4H", flat_j, "VEC4", 5123, False, 34962),
              "WEIGHTS_0": buf.add("4f", flat_w, "VEC4", 5126, False, 34962)}
+    # One primitive per material: the plain one, then one per glowing colour.
+    groups = {}
+    for k, tri in enumerate(triangles):
+        c = colours[tri[0]]
+        groups.setdefault(c if c in glow else None, []).append(k)
+    materials = [{"name": name, "pbrMetallicRoughness": {"baseColorFactor": [1, 1, 1, 1], "metallicFactor": 0, "roughnessFactor": 1}}]
+    primitives = []
+    for c in sorted(groups, key=lambda c: c is not None):
+        if c is not None:
+            materials.append(dict(materials[0], name=f"{name}_Glow{len(materials)}", emissiveFactor=list(c[:3])))
+        rows = [(3 * k + i,) for k in groups[c] for i in range(3)]
+        primitives.append({"attributes": attrs, "indices": buf.add("I", rows, "SCALAR", 5125, False, 34963),
+                           "material": len(materials) - 1})
     rest = [m for _, _, m in joints]
     nodes = [{"name": name, "mesh": 0, "skin": 0}]
     for i, (jname, parent, m) in enumerate(joints):
@@ -102,8 +116,7 @@ def write(path, name, positions, colours, skin, triangles, joints, animations):
     ibm = [tuple(inverse(m)[r][c] for c in range(4) for r in range(4)) for m in rest]
     j = {"asset": {"version": "2.0", "generator": "sekhpet sources/osrs"},
          "scene": 0, "scenes": [{"nodes": [0] + roots}], "nodes": nodes,
-         "materials": [{"name": name, "pbrMetallicRoughness": {"baseColorFactor": [1, 1, 1, 1], "metallicFactor": 0, "roughnessFactor": 1}}],
-         "meshes": [{"name": name, "primitives": [{"attributes": attrs, "material": 0}]}],
+         "materials": materials, "meshes": [{"name": name, "primitives": primitives}],
          "skins": [{"joints": [i + 1 for i in range(len(joints))], "skeleton": roots[0],
                     "inverseBindMatrices": buf.add("16f", ibm, "MAT4", 5126)}]}
     anims = []

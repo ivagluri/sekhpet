@@ -240,18 +240,33 @@ def bake_to_texture(mesh, size=1024):
     bpy.ops.mesh.select_all(action='SELECT')
     bpy.ops.uv.smart_project(angle_limit=1.15, island_margin=0.02)
     bpy.ops.object.mode_set(mode='OBJECT')
+    def glow(shader):
+        """A material's own light (glTF emissive), as (colour socket, strength); None when it has none."""
+        colour, strength = shader.inputs['Emission Color'], shader.inputs['Emission Strength']
+        lit = colour.links or max(colour.default_value[:3]) > 0
+        return (colour, strength.default_value) if lit and (strength.links or strength.default_value > 0) else None
+
+    channels = ['Color', 'Alpha']
+    if any(glow(slot.material.node_tree.nodes['Principled BSDF']) for slot in mesh.material_slots):
+        channels.append('Glow')
     images = {}
-    for channel in ('Color', 'Alpha'):
+    for channel in channels:
         image = bpy.data.images.new(f'{PAL}_{channel}', size, size, alpha=False)
-        image.colorspace_settings.name = 'sRGB' if channel == 'Color' else 'Non-Color'
+        image.colorspace_settings.name = 'Non-Color' if channel == 'Alpha' else 'sRGB'
         images[channel] = image
         for slot in mesh.material_slots:
             nt = slot.material.node_tree
             shader = nt.nodes['Principled BSDF']
             emit = nt.nodes.new('ShaderNodeEmission')
             out = next(n for n in nt.nodes if n.type == 'OUTPUT_MATERIAL')
-            source = shader.inputs['Base Color' if channel == 'Color' else 'Alpha']
-            if source.links:
+            if channel == 'Glow':
+                source, strength = glow(shader) or (None, 0.0)
+                emit.inputs['Strength'].default_value = strength
+            else:
+                source = shader.inputs['Base Color' if channel == 'Color' else 'Alpha']
+            if source is None:
+                emit.inputs['Color'].default_value = (0, 0, 0, 1)
+            elif source.links:
                 nt.links.new(source.links[0].from_socket, emit.inputs['Color'])
             else:
                 value = source.default_value
@@ -281,6 +296,15 @@ def bake_to_texture(mesh, size=1024):
     rgba.file_format = 'PNG'
     rgba.save()
     rgba.pack()
+    if 'Glow' in images:
+        shine = images.pop('Glow')
+        shine.name = f'{PAL}_Glow'
+        shine.filepath_raw = str(DEST / f'{PAL}_Glow.png')
+        shine.file_format = 'PNG'
+        shine.save()
+        shine.pack()
+    else:
+        shine = None
     for image in images.values():
         bpy.data.images.remove(image)
     if source_uv:
@@ -304,11 +328,17 @@ def bake_to_texture(mesh, size=1024):
     mask.inputs[1].default_value = 0.5
     nt.links.new(texture.outputs['Alpha'], mask.inputs[0])
     nt.links.new(mask.outputs[0], shader.inputs['Alpha'])
+    if shine:  # glowing parts keep their colour whatever the lighting
+        light = nt.nodes.new('ShaderNodeTexImage')
+        light.name = 'Glow'
+        light.image = shine
+        nt.links.new(light.outputs['Color'], shader.inputs['Emission Color'])
+        shader.inputs['Emission Strength'].default_value = 1.0
     material.surface_render_method = 'DITHERED'
     material.use_backface_culling = False
     mesh.data.materials.clear()
     mesh.data.materials.append(material)
-    print(f'baked colours into {rgba.filepath_raw}')
+    print(f'baked colours into {rgba.filepath_raw}' + (f' and glow into {shine.filepath_raw}' if shine else ''))
 
 
 # Vertex colour grading, for rips whose colour lives in the vertices (PS1 models):

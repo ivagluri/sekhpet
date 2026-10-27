@@ -46,15 +46,19 @@ def merged(cache, parts, recolours, scale=(1, 1, 1), hide=()):
     return models, verts, labels, faces
 
 
+def face_rgba(hsl):
+    rgb = glb.hsl_to_rgb(hsl) if hsl is not None else (0.55, 0.55, 0.55)  # textured faces: plain grey
+    return tuple(c ** 2.2 for c in rgb) + (1.0,)  # glTF vertex colours are linear
+
+
 def mesh_arrays(verts, faces):
     """Flat-shaded triangles: each face gets its own corners so it keeps its one colour."""
     pos, col, tris, src = [], [], [], []
     for a, b, c, hsl in faces:
-        rgb = glb.hsl_to_rgb(hsl) if hsl is not None else (0.55, 0.55, 0.55)  # textured faces: plain grey
-        rgb = tuple(c ** 2.2 for c in rgb)  # glTF vertex colours are linear
+        rgba = face_rgba(hsl)
         start = len(pos)
         for v in (a, b, c):
-            pos.append(to_gl(verts[v])); col.append(rgb + (1.0,)); src.append(v)
+            pos.append(to_gl(verts[v])); col.append(rgba); src.append(v)
         tris.append((start, start + 1, start + 2))
     return pos, col, tris, src
 
@@ -97,10 +101,9 @@ def classic(cache, parts, recolours, clips, loops, scale, hide=()):
     return pos, col, skin, tris, joints, out, verts, used, centre, label_verts
 
 
-def build(folder):
-    folder = Path(folder)
-    spec = json.loads((folder / "character.json").read_text())
-    o = spec["osrs"]; cache = Cache()
+def parts_of(cache, folder, spec):
+    """The character's models: (parts, recolours, NPC resize, name)."""
+    o = spec["osrs"]
     if "npc" in o:
         n = defs.npc(cache.files(2, 9)[o["npc"]], o["npc"])
         parts = [(m, n["recolor"], 0) for m in n["models"]]; recolours = []
@@ -111,6 +114,14 @@ def build(folder):
         kits = defs.load_all(cache, 3, defs.kit); items = defs.load_all(cache, 10, defs.item)
         parts, recolours, _ = player.assemble(outfit, kits, items)
         scale = (1, 1, 1); name = spec["pal"]
+    return parts, recolours, scale, name
+
+
+def build(folder):
+    folder = Path(folder)
+    spec = json.loads((folder / "character.json").read_text())
+    o = spec["osrs"]; cache = Cache()
+    parts, recolours, scale, name = parts_of(cache, folder, spec)
     clips = o["clips"]; loops = set(o.get("loops", []))
     if set(spec["clips"]) != set(clips):  # osrs.clips is the list to edit; the import's map follows it
         spec["clips"] = {c: c for c in clips}
@@ -131,7 +142,8 @@ def build(folder):
         joints = [(n, parent, conj(m)) for n, parent, m in joints]
         anims = [(n, t, {j: [conj(m) for m in ms] for j, ms in tr.items()}) for n, t, tr in anims]
     out = folder / spec["model"]
-    glb.write(str(out), name, pos, col, skin, tris, joints, anims)
+    glow = {face_rgba(hsl) for hsl in o.get("glow", [])}
+    glb.write(str(out), name, pos, col, skin, tris, joints, anims, glow)
     height = max(p[1] for p in pos) - min(p[1] for p in pos)
     print(f"GLB_OK {out} {len(tris)} faces, {len(joints)} bones, {len(anims)} clips, {height:.2f} m tall")
 

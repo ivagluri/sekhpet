@@ -146,8 +146,10 @@ def write(folder, pal, display, clips, loops, extra, behaviour, height, kind, ro
             "osrs": dict(kind, clips=clips, loops=sorted(loops))}
     old = folder / "character.json"
     if old.exists():  # hand settings survive a redraft
-        hidden = json.loads(old.read_text()).get("osrs", {}).get("hideFaceGroups")
+        kept = json.loads(old.read_text()).get("osrs", {})
+        hidden = kept.get("hideFaceGroups")
         if hidden: spec["osrs"]["hideFaceGroups"] = sorted(set(hidden) | set(spec["osrs"].get("hideFaceGroups", [])))
+        if kept.get("glow"): spec["osrs"]["glow"] = kept["glow"]
     cfg = {"_comment": f"Drafted by sources/osrs/draft.py ({display}); edit freely, re-run make_osrs_pet.sh.",
            "displayName": display, "animSet": pal, "meshScale": meshscale, "floats": False,
            "defaults": {"facing": "directional", "loop": False, "fadeIn": 0.2}, "directionalYawDegrees": 40,

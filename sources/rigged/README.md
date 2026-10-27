@@ -49,7 +49,8 @@ characters/hero/
   "textures": "textures",            // optional: where to look for textures the model doesn't
                                      //   carry (FBX usually doesn't); beside the model is searched too
   "bakeTexture": false,              // optional: bake vertex colours and several materials into one
-                                     //   texture (models whose colour is in the vertices)
+                                     //   texture (models whose colour is in the vertices); a
+                                     //   material's emission is baked into a glow texture beside it
   "linearVertexColours": false,      // optional: vertex colours stored one sRGB step too bright
   "darkenGreys": [0.4, 0.12, 0.2],   // optional: darken neutral greys below 0.4 (saturation under
                                      //   0.12) by a factor of 0.2

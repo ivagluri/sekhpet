@@ -38,9 +38,15 @@ The `"osrs"` block in `character.json`:
   "npc": 2108,                        // the NPC (or "player": "outfit.txt")
   "clips": {"Idle": 813, "Wave": 863},  // pet clip name -> the game's animation (sequence) id
   "loops": ["Idle", "Walk"],          // clips that loop: their last pose blends back into the first
-  "hideFaceGroups": [4, 5, 6]         // optional: face groups to leave out (water ripples); kept on --redraft
+  "hideFaceGroups": [4, 5, 6],        // optional: face groups to leave out (water ripples); kept on --redraft
+  "glow": [4011]                      // optional: face colours that shine whatever the lighting; kept on --redraft
 }
 ```
+
+`glow` is for parts the game shows glowing, such as eyes: the desktop's key light comes from the upper left,
+so a small face turned away from it goes dark (TzTok-Jad's right eye). Its values are the model's face
+colours, the client's 16-bit HSL; `python3 sources/osrs/colours.py characters/<name>` lists them with where
+each sits on the model.
 
 To add a clip, put `"Name": id` in `osrs.clips` (ids and names are in `clips.txt`, and every animation's
 name is in `.tools/osrs/AnimationID.java`); the import's `clips` map follows it. Give it settings in

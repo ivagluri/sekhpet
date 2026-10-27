@@ -1,0 +1,8 @@
+{
+  "runelite_commit": "009555a90d87db6ba4aaab5d653217b9797bcef6",
+  "animation_ids_sha256": "5732117cd19f7f69c65d1f8b653ff31d5116b534ac9098e8560804987ad4f173",
+  "fashionscape_data_commit": "5d55ea00cf324ea351a31ffae8b40b145982b2a9",
+  "weapon_idles_sha256": "ff10e05d056beb9db4e71bea05ca49cfc81b22d4f5b322758fb9f6f33be115fd",
+  "blender_tested": "5.2.2 LTS",
+  "tested_cache": "OSRS live cache, 2026-10-19"
+}

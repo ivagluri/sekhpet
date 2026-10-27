@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OSRS Character Picker</title>
+<!-- Template: sources/osrs/catalog.sh copies this into work/osrs-catalog/picker.html with the catalog's data
+     filled in, next to the pictures it renders (thumbs/, items/). Open that copy in a browser. -->
+<style>
+  :root {
+    --bg: #f4f2ee; --panel: #ffffff; --ink: #24221f; --muted: #6d675f; --line: #ddd7ce;
+    --accent: #b8741a; --accent-soft: #f6e6cf; --tile: #ece8e1; --ground: #6b6650;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1b1c20; --panel: #24262b; --ink: #ecebe8; --muted: #a29e97; --line: #3a3c42;
+      --accent: #e0a24a; --accent-soft: #3d3222; --tile: #2e3036; --ground: #4d4a3c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  header { padding: 20px 24px 8px; }
+  h1 { margin: 0; font-size: 22px; }
+  header p { margin: 4px 0 0; color: var(--muted); }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; padding: 16px 24px 32px; align-items: start; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 12px 16px 24px; } header { padding: 16px 16px 4px; } }
+  .steps { display: grid; gap: 14px; min-width: 0; }
+  details, section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+  section { padding: 16px; }
+  details > div { padding: 0 16px 16px; }
+  summary { cursor: pointer; padding: 14px 16px; list-style: none; display: flex; align-items: center; gap: 10px; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "▸"; color: var(--muted); transition: transform .15s; }
+  details[open] > summary::before { transform: rotate(90deg); }
+  summary h2, section h2 { margin: 0; font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  section h2 { margin-bottom: 12px; }
+  summary .sum { margin-left: auto; font-size: 13px; color: var(--muted); }
+  .bodies { display: flex; gap: 12px; flex-wrap: wrap; }
+  .body-card { border: 2px solid var(--line); border-radius: 10px; background: var(--tile); padding: 8px 14px 10px; cursor: pointer; text-align: center; color: var(--ink); font: inherit; }
+  .body-card img { display: block; height: 270px; margin: 0 auto 6px; }
+  .body-card[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+  .tab { border: 1px solid var(--line); background: var(--tile); color: var(--ink); border-radius: 999px; padding: 6px 14px; cursor: pointer; font: inherit; }
+  .tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tab small { opacity: .75; margin-left: 4px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(156px, 1fr)); gap: 12px; }
+  .opt { position: relative; border: 2px solid transparent; border-radius: 10px; background: var(--tile); padding: 0; cursor: pointer; aspect-ratio: 1; overflow: hidden; }
+  .opt img { width: 100%; height: 100%; object-fit: contain; display: block; transition: transform .15s; }
+  .opt:hover img { transform: scale(1.08); }
+  .opt .num { position: absolute; left: 6px; top: 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .opt[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+  .opt[aria-pressed="true"] .num { color: var(--accent); }
+  .colour-row { margin-bottom: 16px; }
+  .colour-row h3 { margin: 0 0 6px; font-size: 14px; text-transform: capitalize; }
+  .swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+  .sw { width: 38px; height: 38px; border-radius: 8px; border: 2px solid var(--line); cursor: pointer; position: relative; padding: 0; }
+  .sw span { position: absolute; bottom: -1px; right: 3px; font-size: 10px; color: #fff; text-shadow: 0 0 3px #000; }
+  .sw[aria-pressed="true"] { outline: 3px solid var(--accent); outline-offset: 1px; }
+  .slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+  .slot { border: 1px solid var(--line); border-radius: 10px; background: var(--tile); padding: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .slot h3 { margin: 0; font-size: 14px; display: flex; justify-content: space-between; align-items: baseline; }
+  .slot h3 small { color: var(--muted); font-weight: normal; }
+  .worn { display: flex; gap: 10px; align-items: center; min-height: 72px; }
+  .icon { width: 72px; height: 72px; flex: none; border-radius: 8px; background: var(--ground); display: grid; place-items: center; overflow: hidden; }
+  .icon img { width: 100%; height: 100%; object-fit: contain; }
+  .worn .what { flex: 1; min-width: 0; font-size: 14px; }
+  .worn .what small { display: block; color: var(--muted); }
+  .clear { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; cursor: pointer; padding: 2px 8px; font: inherit; font-size: 12px; }
+  .slot select { width: 100%; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; font: inherit; font-size: 13px; }
+  .note { color: var(--muted); font-size: 13px; margin: 10px 0 0; }
+  aside { position: sticky; top: 16px; }
+  @media (max-width: 900px) { aside { position: static; } }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 4px; }
+  input, textarea { width: 100%; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 8px; padding: 8px; font: inherit; }
+  textarea { min-height: 70px; resize: vertical; font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+  .picked { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .picked button { border: 1px solid var(--line); background: var(--tile); border-radius: 8px; padding: 2px; cursor: pointer; color: var(--ink); font: inherit; font-size: 11px; }
+  .picked img { width: 100%; aspect-ratio: 1; object-fit: contain; display: block; }
+  .picked .gear { background: var(--ground); border-radius: 6px; }
+  .chips { display: flex; gap: 4px; margin-top: 6px; }
+  .chip { flex: 1; height: 18px; border-radius: 4px; border: 1px solid var(--line); }
+  pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 12.5px; overflow-x: auto; margin: 12px 0 10px; white-space: pre-wrap; }
+  .actions { display: flex; gap: 8px; }
+  .actions button { flex: 1; border: 0; border-radius: 8px; padding: 9px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  .actions button.secondary { background: var(--tile); color: var(--ink); border: 1px solid var(--line); }
+  code { font-size: 12.5px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>OSRS character picker</h1>
+  <p>Pick a body type, a look and a loadout. Your picks become an <code>outfit.txt</code> for <code>sources/osrs</code>.</p>
+</header>
+<main>
+  <div class="steps">
+    <details id="sec-body" open>
+      <summary><h2>1 · Body type</h2><span class="sum" id="sum-body"></span></summary>
+      <div><div class="bodies" id="bodies"></div></div>
+    </details>
+    <details id="sec-look" open>
+      <summary><h2>2 · Look</h2><span class="sum" id="sum-look"></span></summary>
+      <div><div class="tabs" role="tablist" id="tabs"></div><div id="panel"></div></div>
+    </details>
+    <details id="sec-gear" open>
+      <summary><h2>3 · Equipment</h2><span class="sum" id="sum-gear"></span></summary>
+      <div><div class="slots" id="slots"></div>
+        <p class="note">Worn items hide the body parts they cover (body armour hides the arms, a full helm the hair and jaw). A weapon brings its stance and attacks where they can be matched.</p>
+      </div>
+    </details>
+  </div>
+  <aside>
+    <section>
+      <h2>Your character</h2>
+      <div class="picked" id="picked"></div>
+      <div class="chips" id="chips"></div>
+      <label for="name">Name (its folder in characters/)</label>
+      <input id="name" placeholder="e.g. dhideguy" autocomplete="off">
+      <label for="items">Other items, one per line (optional)</label>
+      <textarea id="items" placeholder="anything not in the lists"></textarea>
+      <pre id="outfit"></pre>
+      <div class="actions">
+        <button id="copy">Copy outfit.txt</button>
+        <button id="save" class="secondary">Download</button>
+      </div>
+      <p class="note" id="howto"></p>
+    </section>
+  </aside>
+</main>
+<script>
+const DATA = /*CATALOG_DATA*/null;
+const PARTS = ["hair", "jaw", "torso", "arms", "hands", "legs", "feet"];
+const COLOURS = ["hair", "torso", "legs", "feet", "skin"];
+const SLOTS = ["head", "cape", "amulet", "weapon", "body", "shield", "legs", "hands", "feet"];
+const store = {
+  get() { try { return JSON.parse(localStorage.getItem("osrs-picker") || "null"); } catch (e) { return null; } },
+  set(v) { try { localStorage.setItem("osrs-picker", JSON.stringify(v)); } catch (e) {} }
+};
+const state = Object.assign({ body: "A", tab: "hair", styles: {}, colours: {}, gear: {}, name: "", items: "", open: {} }, store.get() || {});
+state.gear = state.gear || {};
+const $ = id => document.getElementById(id);
+const thumb = (part, n) => `thumbs/${state.body}-${part}-${n}.png`;
+const count = part => (DATA.styles[state.body] || {})[part] || 0;
+const style = part => Math.min(state.styles[part] || 1, Math.max(count(part), 1));
+const colour = c => state.colours[c] || 1;
+const rgb = ([r, g, b]) => `rgb(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)})`;
+const cap = s => s[0].toUpperCase() + s.slice(1);
+
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) k.startsWith("on") ? e.addEventListener(k.slice(2), v) : e.setAttribute(k, v);
+  e.append(...kids); return e;
+}
+const iconOf = entry => el("div", { class: "icon" }, entry && entry.icon ? el("img", { src: `items/${entry.icon}`, alt: "" }) : "");
+
+function renderBodies() {
+  $("bodies").replaceChildren(...["A", "B"].map(b => el("button", {
+    class: "body-card", "aria-pressed": state.body === b, onclick: () => { state.body = b; update(); }
+  }, el("img", { src: `thumbs/${b}-body.png`, alt: "" }), `Body type ${b}`)));
+  $("sum-body").textContent = `Body type ${state.body}`;
+}
+
+function renderTabs() {
+  const tabs = PARTS.map(p => [p, cap(p), style(p)]).concat([["colours", "Colours", ""]]);
+  $("tabs").replaceChildren(...tabs.map(([id, text, n]) => el("button", {
+    class: "tab", role: "tab", "aria-selected": state.tab === id, onclick: () => { state.tab = id; update(); }
+  }, text, n ? el("small", {}, `#${n}`) : "")));
+  $("sum-look").textContent = PARTS.map(p => `${p} ${style(p)}`).join(" · ");
+}
+
+function renderPanel() {
+  if (state.tab === "colours") {
+    const rows = COLOURS.map(c => el("div", { class: "colour-row" }, el("h3", {}, `${c} colour`),
+      el("div", { class: "swatches" }, ...DATA.colours[c].map((v, i) => el("button", {
+        class: "sw", style: `background:${rgb(v)}`, title: `${c} colour ${i + 1}`, "aria-pressed": colour(c) === i + 1,
+        onclick: () => { state.colours[c] = i + 1; update(); }
+      }, el("span", {}, i + 1))))));
+    $("panel").replaceChildren(...rows, el("p", { class: "note" }, "The pictures show the default colours; your colours are applied when the pet is built."));
+    return;
+  }
+  const part = state.tab, n = count(part);
+  const grid = el("div", { class: "grid" });
+  for (let i = 1; i <= n; i++) grid.append(el("button", {
+    class: "opt", title: `${part} ${i}`, "aria-pressed": style(part) === i,
+    onclick: () => { state.styles[part] = i; update(); }
+  }, el("img", { src: thumb(part, i), alt: `${part} ${i}`, loading: "lazy" }), el("span", { class: "num" }, i)));
+  const notes = { arms: "Hidden by most body armour.", hands: "Hidden by gloves.", feet: "Hidden by boots.", jaw: "Takes the hair colour; hidden by full helmets." };
+  $("panel").replaceChildren(grid, notes[part] ? el("p", { class: "note" }, notes[part]) : "");
+}
+
+// Equipment: a searchable list per slot; only the picked item's icon is ever loaded.
+function renderSlots() {
+  if (!DATA.items) {
+    $("slots").replaceChildren(el("p", { class: "note" }, "Run bash sources/osrs/catalog.sh --items to fill these lists."));
+    $("sum-gear").textContent = ""; return;
+  }
+  $("slots").replaceChildren(...SLOTS.map(slot => {
+    const list = DATA.items[slot] || [];
+    const picked = state.gear[slot];
+    const select = el("select", { size: 7, "aria-label": `${slot} items` });
+    const fill = q => {
+      q = q.trim().toLowerCase();
+      const shown = q ? list.filter(e => e.name.toLowerCase().includes(q)) : list;
+      select.replaceChildren(...shown.map(e => {
+        const o = el("option", { value: e.line }, e.line === e.name ? e.name : `${e.name} (#${e.id})`);
+        if (picked && picked.line === e.line) o.selected = true;
+        return o;
+      }));
+    };
+    const search = el("input", { type: "search", placeholder: `Search ${list.length} ${slot} items` });
+    search.addEventListener("input", () => fill(search.value));
+    select.addEventListener("change", () => {
+      state.gear[slot] = list.find(e => e.line === select.value); store.set(state); renderSlotHead(); renderSummary();
+    });
+    const head = el("div", { class: "worn" });
+    const renderSlotHead = () => {
+      const p = state.gear[slot];
+      head.replaceChildren(iconOf(p), el("div", { class: "what" }, p ? p.name : "Nothing", el("small", {}, p ? `item ${p.id}` : "pick from the list")),
+        p ? el("button", { class: "clear", title: "Take it off", onclick: () => { delete state.gear[slot]; update(); } }, "✕") : "");
+    };
+    renderSlotHead(); fill("");
+    return el("div", { class: "slot" }, el("h3", {}, cap(slot), el("small", {}, `${list.length}`)), head, search, select);
+  }));
+  const worn = SLOTS.filter(s => state.gear[s]).length;
+  $("sum-gear").textContent = worn ? `${worn} worn` : "nothing worn";
+}
+
+function outfitText() {
+  const lines = [`body: ${state.body}`];
+  for (const p of PARTS) lines.push(`${p}: ${style(p)}`);
+  for (const c of COLOURS) lines.push(`${c} colour: ${colour(c)}`);
+  const gear = SLOTS.filter(s => state.gear[s]).map(s => state.gear[s].line);
+  const extra = state.items.split("\n").map(s => s.trim()).filter(Boolean);
+  if (gear.length || extra.length) lines.push("", ...gear, ...extra);
+  lines.push("", "stance: auto", "combat: auto", "emotes: default");
+  return lines.join("\n") + "\n";
+}
+
+function renderSummary() {
+  const look = PARTS.map(p => el("button", { title: `Change ${p}`, onclick: () => { state.tab = p; $("sec-look").open = true; update(); } },
+    el("img", { src: thumb(p, style(p)), alt: "" }), `${p} ${style(p)}`));
+  const gear = SLOTS.filter(s => state.gear[s]).map(s => el("button", { title: state.gear[s].name, onclick: () => { $("sec-gear").open = true; } },
+    state.gear[s].icon ? el("img", { class: "gear", src: `items/${state.gear[s].icon}`, alt: "" }) : "", s));
+  $("picked").replaceChildren(...look, ...gear);
+  $("chips").replaceChildren(...COLOURS.map(c => el("div", { class: "chip", title: `${c} colour ${colour(c)}`, style: `background:${rgb(DATA.colours[c][colour(c) - 1])}` })));
+  $("outfit").textContent = outfitText();
+  const name = (state.name || "").toLowerCase().replace(/[^a-z0-9]/g, "") || "<name>";
+  $("howto").innerHTML = `Save it as <code>characters/${name}/outfit.txt</code>, then run <code>bash sources/osrs/make_osrs_pet.sh ${name}</code>.`;
+}
+
+function update() {
+  store.set(state);
+  renderBodies(); renderTabs(); renderPanel(); renderSlots(); renderSummary();
+}
+
+if (!DATA) {
+  document.body.replaceChildren(el("p", { style: "padding:24px" }, "This is the template: run bash sources/osrs/catalog.sh and open work/osrs-catalog/picker.html."));
+} else {
+  for (const id of ["sec-body", "sec-look", "sec-gear"]) {
+    const d = $(id);
+    if (id in state.open) d.open = state.open[id];
+    d.addEventListener("toggle", () => { state.open[id] = d.open; store.set(state); });
+  }
+  $("name").value = state.name; $("items").value = state.items;
+  $("name").addEventListener("input", e => { state.name = e.target.value; store.set(state); renderSummary(); });
+  $("items").addEventListener("input", e => { state.items = e.target.value; store.set(state); renderSummary(); });
+  $("copy").addEventListener("click", async e => {
+    try { await navigator.clipboard.writeText(outfitText()); e.target.textContent = "Copied"; }
+    catch (err) { e.target.textContent = "Select the text above"; }
+    setTimeout(() => (e.target.textContent = "Copy outfit.txt"), 1500);
+  });
+  $("save").addEventListener("click", () => {
+    const a = el("a", { href: URL.createObjectURL(new Blob([outfitText()], { type: "text/plain" })), download: "outfit.txt" });
+    document.body.append(a); a.click(); a.remove();
+  });
+  update();
+}
+</script>
+</body>
+</html>

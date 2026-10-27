@@ -25,8 +25,9 @@ Each kind of source has its own folder in `sources/`, with a README and one scri
 | [`sources/palworld/`](PIPELINE.md) | Palworld installed | `bash sources/palworld/make_pet.sh <Pal>-extract.zip` (below) |
 | [`sources/rigged/`](sources/rigged/README.md) | a rigged character with animations, as glTF/GLB or FBX | `bash sources/rigged/make_rigged_pet.sh characters/<name>` |
 | [`sources/sprites/`](sources/sprites/README.md) | a 2D character's sprite images (GIF, PNG or WebP) | `bash sources/sprites/make_sprite_pet.sh characters/<name>` |
+| [`sources/osrs/`](sources/osrs/README.md) | RuneLite (Old School RuneScape) installed | `bash sources/osrs/make_osrs_pet.sh "<NPC name>"`, or `--player <name>` |
 
-For the last two, a character is a folder (in `characters/`, ignored by git, or anywhere) holding a `character.json` that says what to use and a `clip-config.json` for the pet's behaviour. Sprite pets are paper cut-outs: flat cards that turn and slant like the rest.
+For the rigged and sprite sources, a character is a folder (in `characters/`, ignored by git, or anywhere) holding a `character.json` that says what to use and a `clip-config.json` for the pet's behaviour. Sprite pets are paper cut-outs: flat cards that turn and slant like the rest.
 
 ## Quick start (Palworld)
 
@@ -87,7 +88,7 @@ The app is ad-hoc signed, so on another Mac macOS blocks the first launch. Open 
 ## Docs
 
 - [PIPELINE.md](PIPELINE.md): how a pal becomes a pet, the rules the config generator follows, per-pal overrides, and known problems with their fixes.
-- [sources/rigged/README.md](sources/rigged/README.md) and [sources/sprites/README.md](sources/sprites/README.md): the other sources.
+- [sources/rigged/README.md](sources/rigged/README.md), [sources/sprites/README.md](sources/sprites/README.md) and [sources/osrs/README.md](sources/osrs/README.md): the other sources.
 - [PET_PACKS.md](PET_PACKS.md): the pack format the app loads. Anything that produces this format works.
 
 ## Layout
@@ -100,7 +101,8 @@ The app is ad-hoc signed, so on another Mac macOS blocks the first launch. Open 
 | `sources/palworld/` | Palworld: `extract_pal.py` (game machine), `make_pet.sh` (Mac) and the steps it runs; `converter/`, a small CUE4Parse program for the game's packages; `overrides/`, optional hand fixes per pal. |
 | `sources/rigged/` | Rigged glTF/GLB or FBX characters: import, clips, props, bone pruning. |
 | `sources/sprites/` | Sprite images to paper cut-out pets. |
-| `characters/` | Your characters for the rigged and sprite sources (ignored by git). |
+| `sources/osrs/` | Old School RuneScape NPCs and player characters, from RuneLite's game cache, through the rigged route. |
+| `characters/` | Your characters for the rigged, sprite and OSRS sources (ignored by git). |
 | `work/` | Everything generated per pet (ignored by git). |
 | `.tools/` | Downloaded tools (ignored by git). |
 

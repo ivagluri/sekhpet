@@ -56,14 +56,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ClaudeWatch.shared.start()
         if UserDefaults.standard.bool(forKey: Defaults.house) { setHouse(true) }
 
-        // Behavior and window movement run on the display's refresh, so walking is smooth.
+        startFrameLoop()
+        // A display link belongs to one screen, and can stop for good when that screen goes away
+        // (an external display dropping off during a long sleep): pets then hold whatever clip
+        // they were in. Start a new one whenever it's gone quiet with the screens awake.
+        frameWatch = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.screensAsleep, CACurrentMediaTime() - self.lastFrame > 2 else { return }
+                NSLog("SekhPet: no frame for %.1fs; restarting the frame loop", CACurrentMediaTime() - self.lastFrame)
+                self.startFrameLoop()
+            }
+        }
+    }
+
+    private var lastFrame = CACurrentMediaTime()
+    private var frameWatch: Timer?
+    private var screensAsleep = false
+
+    /// Behavior and window movement run on the display's refresh, so walking is smooth.
+    /// Replaces any link already running, so there's only ever one.
+    private func startFrameLoop() {
+        displayLink?.invalidate()
         displayLink = (NSScreen.main ?? NSScreen.screens[0]).displayLink(target: self, selector: #selector(frame))
         displayLink?.add(to: .main, forMode: .common)
+        lastFrame = CACurrentMediaTime()
         applyPowerSaving()
     }
 
     @objc private func frame() {
         let now = CACurrentMediaTime()
+        lastFrame = now
         for pet in pets { pet.frame(at: now) }
         house?.frame(at: now)
         viewer?.frame(at: now)
@@ -393,9 +415,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.house?.setAway(on, reason)
         }
         for (name, asleep) in [(NSWorkspace.screensDidSleepNotification, true), (NSWorkspace.screensDidWakeNotification, false)] {
-            workspace.addObserver(forName: name, object: nil, queue: .main) { _ in
-                MainActor.assumeIsolated { away(asleep, .screensAsleep) }
+            workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    away(asleep, .screensAsleep)
+                    self?.screensAsleep = asleep
+                    // The screens may have come back as different ones.
+                    if !asleep { self?.startFrameLoop() }
+                }
             }
+        }
+        NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
+                                               object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.startFrameLoop() }
         }
         // Locked or switched away from, other apps' windows leave the window list: perched pets
         // would take their window for closed.

@@ -207,7 +207,7 @@ for material in bpy.data.materials:
     for node in list(material.node_tree.nodes):
         if node.type != 'TEX_IMAGE':
             continue
-        if not node.image or not node.image.has_data:
+        if not node.image or not (node.image.has_data or node.image.packed_file):  # packed ones load lazily
             found = find_texture(node.image)
             if found:
                 node.image = bpy.data.images.load(str(found), check_existing=True)

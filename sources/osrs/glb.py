@@ -1,6 +1,6 @@
-"""A small skinned glTF (GLB) writer: one mesh with vertex colours, a joint hierarchy, and animations given
-as each joint's model-space matrix per key time (LINEAR keys)."""
-import json, math, struct
+"""A small skinned glTF (GLB) writer: one mesh coloured from a palette texture, a joint hierarchy, and animations
+given as each joint's model-space matrix per key time (LINEAR keys)."""
+import json, math, struct, zlib
 from anim import mul
 
 
@@ -52,6 +52,33 @@ def decompose(m):
     return [m[0][3], m[1][3], m[2][3]], q, sc
 
 
+CELL = 8  # palette cell, in pixels: every corner of a face samples its cell's middle, so filtering can't mix colours
+
+
+def png(width, height, rows):
+    """rows: [[(r, g, b) bytes per pixel]] -> PNG file bytes."""
+    raw = b"".join(b"\0" + bytes(v for px in row for v in px) for row in rows)
+    chunk = lambda tag, data: struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
+
+
+def palette(colours, glow):
+    """Distinct linear colours -> (cell per colour, colour PNG, glow PNG or None, side in cells). The glow
+    image is black but for the glowing colours' cells."""
+    cells = {c: i for i, c in enumerate(sorted(set(colours)))}
+    side = 1
+    while side * side < len(cells): side *= 2
+    def image(lit):
+        texel = lambda c: tuple(round(255 * min(1.0, max(0.0, v)) ** (1 / 2.2)) for v in c[:3])  # back to sRGB
+        grid = [[(0, 0, 0)] * side for _ in range(side)]
+        for c, i in cells.items():
+            if lit(c): grid[i // side][i % side] = texel(c)
+        return png(side * CELL, side * CELL, [[px for px in row for _ in range(CELL)] for row in grid for _ in range(CELL)])
+    shine = image(lambda c: c in glow) if any(c in glow for c in cells) else None
+    return cells, image(lambda c: True), shine, side
+
+
 class _Buffer:
     def __init__(self):
         self.bin = bytearray(); self.views = []; self.accessors = []
@@ -70,39 +97,47 @@ class _Buffer:
         self.accessors.append(acc)
         return len(self.accessors) - 1
 
+    def add_bytes(self, data):
+        start = len(self.bin)
+        self.bin += data
+        while len(self.bin) % 4: self.bin += b"\0"
+        self.views.append({"buffer": 0, "byteOffset": start, "byteLength": len(data)})
+        return len(self.views) - 1
+
 
 def write(path, name, positions, colours, skin, triangles, joints, animations, glow=()):
     """positions: [xyz] per vertex (glTF space, metres); colours: [rgba] per vertex; skin: [[(joint, weight), ...]]
     per vertex; triangles: [(a, b, c)] vertex indices; joints: [(name, parent index or -1, rest matrix)] with
     model-space rest matrices, parents before children; animations: [(name, times, {joint: [matrix per time]})]
-    with model-space matrices (joints left out stay at rest). glow: colours (rgba, as in `colours`) whose
-    triangles shine with their own colour (glowing eyes), each through an emissive material of that colour."""
+    with model-space matrices (joints left out stay at rest). glow: colours (rgba, as in `colours`) that shine
+    with their own colour (glowing eyes), through the material's emissive texture.
+
+    Each triangle is one colour, so the colours become a palette texture rather than vertex colours: the
+    pipeline would otherwise bake them onto a texture, where a face smaller than a pixel goes missing."""
     buf = _Buffer()
-    flat_pos, flat_col, flat_j, flat_w = [], [], [], []
+    cells, image, shine, side = palette([colours[tri[0]] for tri in triangles], set(glow))
+    flat_pos, flat_uv, flat_j, flat_w = [], [], [], []
     for tri in triangles:
+        i = cells[colours[tri[0]]]
+        uv = ((i % side + 0.5) / side, (i // side + 0.5) / side)
         for v in tri:
-            flat_pos.append(positions[v]); flat_col.append(colours[v])
+            flat_pos.append(positions[v]); flat_uv.append(uv)
             ws = sorted(skin[v], key=lambda jw: -jw[1])[:4]
             tot = sum(w for _, w in ws) or 1.0
             ws = ws + [(0, 0.0)] * (4 - len(ws))
             flat_j.append(tuple(j for j, _ in ws)); flat_w.append(tuple(w / tot for _, w in ws))
     attrs = {"POSITION": buf.add("3f", flat_pos, "VEC3", 5126, True, 34962),
-             "COLOR_0": buf.add("4f", flat_col, "VEC4", 5126, False, 34962),
+             "TEXCOORD_0": buf.add("2f", flat_uv, "VEC2", 5126, False, 34962),
              "JOINTS_0": buf.add("4H", flat_j, "VEC4", 5123, False, 34962),
              "WEIGHTS_0": buf.add("4f", flat_w, "VEC4", 5126, False, 34962)}
-    # One primitive per material: the plain one, then one per glowing colour.
-    groups = {}
-    for k, tri in enumerate(triangles):
-        c = colours[tri[0]]
-        groups.setdefault(c if c in glow else None, []).append(k)
-    materials = [{"name": name, "pbrMetallicRoughness": {"baseColorFactor": [1, 1, 1, 1], "metallicFactor": 0, "roughnessFactor": 1}}]
-    primitives = []
-    for c in sorted(groups, key=lambda c: c is not None):
-        if c is not None:
-            materials.append(dict(materials[0], name=f"{name}_Glow{len(materials)}", emissiveFactor=list(c[:3])))
-        rows = [(3 * k + i,) for k in groups[c] for i in range(3)]
-        primitives.append({"attributes": attrs, "indices": buf.add("I", rows, "SCALAR", 5125, False, 34963),
-                           "material": len(materials) - 1})
+    images = [{"name": f"{name}_Palette", "mimeType": "image/png", "bufferView": buf.add_bytes(image)}]
+    material = {"name": name, "pbrMetallicRoughness": {"baseColorTexture": {"index": 0}, "metallicFactor": 0,
+                                                        "roughnessFactor": 1},
+                # Matte: any reflection of the app's grey surroundings lifts dark colours to grey.
+                "extensions": {"KHR_materials_specular": {"specularFactor": 0}, "KHR_materials_ior": {"ior": 1}}}
+    if shine:
+        images.append({"name": f"{name}_Glow", "mimeType": "image/png", "bufferView": buf.add_bytes(shine)})
+        material.update(emissiveTexture={"index": 1}, emissiveFactor=[1, 1, 1])
     rest = [m for _, _, m in joints]
     nodes = [{"name": name, "mesh": 0, "skin": 0}]
     for i, (jname, parent, m) in enumerate(joints):
@@ -115,8 +150,11 @@ def write(path, name, positions, colours, skin, triangles, joints, animations, g
     roots = [i + 1 for i, (_, p, _) in enumerate(joints) if p < 0]
     ibm = [tuple(inverse(m)[r][c] for c in range(4) for r in range(4)) for m in rest]
     j = {"asset": {"version": "2.0", "generator": "sekhpet sources/osrs"},
+         "extensionsUsed": ["KHR_materials_specular", "KHR_materials_ior"],
          "scene": 0, "scenes": [{"nodes": [0] + roots}], "nodes": nodes,
-         "materials": materials, "meshes": [{"name": name, "primitives": primitives}],
+         "materials": [material], "meshes": [{"name": name, "primitives": [{"attributes": attrs, "material": 0}]}],
+         "images": images, "textures": [{"source": i, "sampler": 0} for i in range(len(images))],
+         "samplers": [{"magFilter": 9728, "minFilter": 9728}],
          "skins": [{"joints": [i + 1 for i in range(len(joints))], "skeleton": roots[0],
                     "inverseBindMatrices": buf.add("16f", ibm, "MAT4", 5126)}]}
     anims = []

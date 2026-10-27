@@ -141,7 +141,7 @@ def write(folder, pal, display, clips, loops, extra, behaviour, height, kind, ro
     folder.mkdir(parents=True, exist_ok=True)
     gaits = [c for c in ("Walk", "Run") if c in clips]
     meshscale = 1.0 if 1.2 <= height <= 2.4 else round(min(2.4, max(1.2, height)) / height, 4)
-    spec = {"pal": pal, "model": "model.glb", "forward": "-Y", "bakeTexture": True,
+    spec = {"pal": pal, "model": "model.glb", "forward": "-Y",
             "clips": {c: c for c in clips}, "inPlace": gaits,
             "osrs": dict(kind, clips=clips, loops=sorted(loops))}
     old = folder / "character.json"

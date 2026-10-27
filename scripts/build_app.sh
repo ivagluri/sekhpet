@@ -3,7 +3,7 @@
 # in ~/Library/Application Support/SekhPet/Pets/<name>/ (sources/palworld/make_pet.sh installs them).
 #   bash scripts/build_app.sh                    build app/build/SekhPet.app
 #   bash scripts/build_app.sh --install          also replace /Applications/SekhPet.app
-#   bash scripts/build_app.sh --icon AppIcon.icns  use your own app icon (optional)
+#   bash scripts/build_app.sh --icon AppIcon.icns  use your own app icon (optional; kept for later builds)
 #   bash scripts/build_app.sh --icon-pet KingWhale  render the app icon from an installed pet
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -34,7 +34,10 @@ if [ -n "$ICON_PET" ]; then
   rm -rf "$TMP"
   ICON="$ROOT/app/build/AppIcon.icns"
 fi
-[ -n "$ICON" ] && cp "$ICON" "$APP/Contents/Resources/AppIcon.icns"
+# The icon given last is kept in app/build/AppIcon.icns, so a plain rebuild doesn't drop it.
+KEPT="$ROOT/app/build/AppIcon.icns"
+[ -n "$ICON" ] && [ "$ICON" != "$KEPT" ] && cp "$ICON" "$KEPT"
+[ -f "$KEPT" ] && cp "$KEPT" "$APP/Contents/Resources/AppIcon.icns"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

@@ -29,13 +29,53 @@ struct PetPack: Identifiable {
     }
 }
 
+/// How often the random pets change.
+enum ShuffleInterval: String, CaseIterable {
+    case launch, hourly, daily, manual
+
+    var title: String {
+        switch self {
+        case .launch: "Each launch"
+        case .hourly: "Hourly"
+        case .daily: "Daily"
+        case .manual: "Only when asked"
+        }
+    }
+
+    var seconds: TimeInterval? {
+        switch self {
+        case .hourly: 3600
+        case .daily: 86400
+        case .launch, .manual: nil
+        }
+    }
+}
+
 /// State behind the picker window; `setEnabled` places or removes a pet,
 /// `trash` deletes its pack, and `rescan` re-reads the pets folder.
 @MainActor
 @Observable
 final class PetPickerModel {
     private(set) var packs: [PetPack]
+    /// The pets switched on: they stay out. Random picks are separate.
     private(set) var enabled: Set<String>
+    /// The pets out by chance right now.
+    private(set) var random: Set<String> = []
+    /// How many random pets to have out, besides the ones switched on.
+    var randomCount = UserDefaults.standard.integer(forKey: "randomPetCount") {
+        didSet { UserDefaults.standard.set(randomCount, forKey: "randomPetCount"); randomChanged() }
+    }
+    /// Draw the random pets from the starred ones only (from every pet while none are starred).
+    var randomFavoritesOnly = UserDefaults.standard.bool(forKey: "randomPetFavorites") {
+        didSet { UserDefaults.standard.set(randomFavoritesOnly, forKey: "randomPetFavorites"); randomChanged() }
+    }
+    var shuffleInterval = ShuffleInterval(rawValue: UserDefaults.standard.string(forKey: "randomPetShuffle") ?? "") ?? .daily {
+        didSet { UserDefaults.standard.set(shuffleInterval.rawValue, forKey: "randomPetShuffle") }
+    }
+    @ObservationIgnored var randomChanged: () -> Void = {}
+    @ObservationIgnored var shuffleNow: () -> Void = {}
+    /// Starred pets, for the list's favourites filter; kept in the app's settings.
+    private(set) var favorites = Set(UserDefaults.standard.stringArray(forKey: "favoritePets") ?? [])
     @ObservationIgnored var setEnabled: (String, Bool) -> Void = { _, _ in }
     @ObservationIgnored var trash: (PetPack) -> Void = { _ in }
     @ObservationIgnored var rescan: () -> Void = {}
@@ -45,9 +85,10 @@ final class PetPickerModel {
         self.enabled = enabled
     }
 
-    func update(packs: [PetPack], enabled: Set<String>) {
+    func update(packs: [PetPack], enabled: Set<String>, random: Set<String>) {
         self.packs = packs
         self.enabled = enabled
+        self.random = random
     }
 
     func openFolder() { NSWorkspace.shared.open(PetLibrary.folder) }
@@ -59,8 +100,16 @@ final class PetPickerModel {
         setEnabled(name, on)
     }
 
-    /// Keeps the list in step when a pet is removed from the menu instead.
-    func refresh(enabled: Set<String>) { self.enabled = enabled }
+    func toggleFavorite(_ name: String) {
+        if favorites.contains(name) { favorites.remove(name) } else { favorites.insert(name) }
+        UserDefaults.standard.set(favorites.sorted(), forKey: "favoritePets")
+    }
+
+    /// Keeps the list in step when pets come and go from elsewhere (the menu, a shuffle).
+    func refresh(enabled: Set<String>, random: Set<String>) {
+        self.enabled = enabled
+        self.random = random
+    }
 
     // MARK: Adding and exporting
 
@@ -153,21 +202,45 @@ struct PetPickerView: View {
     @Bindable var model: PetPickerModel
     @State private var search = ""
     @State private var dropTargeted = false
+    @AppStorage("petsFavoritesOnly") private var favoritesOnly = false
+    @AppStorage("petsShowRandom") private var showRandom = false
 
     private var filtered: [PetPack] {
         let query = search.trimmingCharacters(in: .whitespaces)
-        guard !query.isEmpty else { return model.packs }
-        return model.packs.filter { $0.displayName.localizedCaseInsensitiveContains(query) }
+        return model.packs.filter { pack in
+            (!favoritesOnly || model.favorites.contains(pack.name))
+                && (query.isEmpty || pack.displayName.localizedCaseInsensitiveContains(query))
+        }
     }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
+                Button {
+                    favoritesOnly.toggle()
+                } label: {
+                    Image(systemName: favoritesOnly ? "star.fill" : "star")
+                        .foregroundStyle(favoritesOnly ? Color.yellow : Color.secondary)
+                }
+                .buttonStyle(.borderless)
+                .help(favoritesOnly ? "Showing favourites only: click to show every pet" : "Show favourites only")
+                Button {
+                    showRandom.toggle()
+                } label: {
+                    Image(systemName: model.random.isEmpty ? "dice" : "dice.fill")
+                        .foregroundStyle(showRandom || !model.random.isEmpty ? Color.accentColor : Color.secondary)
+                }
+                .buttonStyle(.borderless)
+                .help(model.random.isEmpty ? "Random pets" : "Random pets (\(model.random.count) out)")
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField("Search pets", text: $search).textFieldStyle(.plain)
             }
             .padding(10)
             Divider()
+            if showRandom {
+                randomRow
+                Divider()
+            }
             if model.packs.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "pawprint").font(.largeTitle).foregroundStyle(.secondary)
@@ -175,6 +248,17 @@ struct PetPickerView: View {
                     Text("Add a pet's zip, or drop it on this window.")
                         .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
                     Button("Add Pet…") { model.chooseToAdd() }
+                }
+                .padding(30)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+            if filtered.isEmpty && favoritesOnly && search.trimmingCharacters(in: .whitespaces).isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "star").font(.largeTitle).foregroundStyle(.secondary)
+                    Text("No favourites yet").font(.headline)
+                    Text("Star pets in the list to keep them here.")
+                        .font(.callout).foregroundStyle(.secondary)
+                    Button("Show All Pets") { favoritesOnly = false }
                 }
                 .padding(30)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -188,6 +272,18 @@ struct PetPickerView: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
+                    Button {
+                        model.toggleFavorite(pack.name)
+                    } label: {
+                        Image(systemName: model.favorites.contains(pack.name) ? "star.fill" : "star")
+                            .foregroundStyle(model.favorites.contains(pack.name) ? Color.yellow : Color.secondary)
+                    }
+                    .buttonStyle(.borderless)
+                    .help(model.favorites.contains(pack.name) ? "Remove from favourites" : "Add to favourites")
+                    if model.random.contains(pack.name) {
+                        Image(systemName: "dice.fill").foregroundStyle(Color.accentColor)
+                            .help("Out at random: switch it on to keep it")
+                    }
                     Toggle("On desktop", isOn: Binding(
                         get: { model.enabled.contains(pack.name) },
                         set: { model.toggle(pack.name, on: $0) }
@@ -207,6 +303,7 @@ struct PetPickerView: View {
                 .contextMenu { packActions(pack) }
             }
             }
+            }
             Divider()
             HStack {
                 Button {
@@ -221,7 +318,7 @@ struct PetPickerView: View {
                     Image(systemName: "folder")
                 }
                 .help("Open Pets Folder (\(PetLibrary.folder.path))")
-                Text("\(model.enabled.count) of \(model.packs.count) on the desktop (up to \(PetLibrary.maxOut))")
+                Text("\(model.enabled.count + model.random.count) of \(model.packs.count) on the desktop (up to \(PetLibrary.maxOut))")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 Button("None") { for pack in filtered where model.enabled.contains(pack.name) { model.toggle(pack.name, on: false) } }
@@ -244,6 +341,39 @@ struct PetPickerView: View {
                     .allowsHitTesting(false)
             }
         }
+    }
+
+    /// Random pets: how many, drawn from which pets, and how often they change.
+    private var randomRow: some View {
+        let room = max(0, PetLibrary.maxOut - model.enabled.count)
+        return HStack(spacing: 8) {
+            Image(systemName: "dice").foregroundStyle(.secondary)
+            Text("Random pets").font(.callout)
+            Stepper(value: Binding(get: { min(model.randomCount, room) }, set: { model.randomCount = $0 }), in: 0...room) {
+                Text("\(min(model.randomCount, room))").monospacedDigit().frame(minWidth: 14)
+            }
+            .help(room == 0 ? "Every slot is taken by pets switched on" : "How many pets come out at random, besides the ones switched on")
+            Spacer()
+            Button {
+                model.randomFavoritesOnly.toggle()
+            } label: {
+                Image(systemName: model.randomFavoritesOnly ? "star.fill" : "star")
+                    .foregroundStyle(model.randomFavoritesOnly ? Color.yellow : Color.secondary)
+            }
+            .buttonStyle(.borderless)
+            .help(model.randomFavoritesOnly ? "Drawing from favourites: click to draw from every pet" : "Drawing from every pet: click to draw from favourites only")
+            Picker("Shuffle", selection: $model.shuffleInterval) {
+                ForEach(ShuffleInterval.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            .labelsHidden()
+            .fixedSize()
+            .help("How often the random pets change, one at a time")
+            Button("Shuffle") { model.shuffleNow() }
+                .disabled(model.random.isEmpty)
+                .help("Swap every random pet now")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
     }
 
     @ViewBuilder

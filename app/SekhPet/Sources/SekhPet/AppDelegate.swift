@@ -15,6 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         static let wander = "wander"
         static let powerSaving = "powerSaving"
         static let house = "petHouse"
+        static let randomPicks = "randomPets"
+        static let randomShuffled = "randomPetsShuffled"
     }
 
     private var packs: [PetPack] = []
@@ -29,6 +31,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var house: PetHouse?
     private var viewer: PetViewerWindow?
     private var size = PetSize(rawValue: UserDefaults.standard.string(forKey: Defaults.size) ?? "") ?? .medium
+    /// The pets out by chance (the rest of `pets` were switched on), and the ones waiting to be swapped out.
+    private var randomPicks: [String] = []
+    private var swapQueue: [String] = []
+    /// Recently swapped-out pets, so a shuffle doesn't bring one straight back.
+    private var recentlyOut: [String] = []
+    private var shuffleTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         loadPacks()
@@ -37,7 +45,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.setEnabled = { [unowned self] name, on in setEnabled(name, on) }
         picker.trash = { [unowned self] in trash($0) }
         picker.rescan = { [unowned self] in rescan() }
+        picker.randomChanged = { [unowned self] in fillRandom() }
+        picker.shuffleNow = { [unowned self] in shuffleRandom(staggered: false) }
         for pack in packs.filter({ enabled.contains($0.name) }).prefix(PetLibrary.maxOut) { place(pack) }
+        startRandom()
         menu = StatusMenu(pets: { [unowned self] in pets }, actions: menuActions())
         // With nothing installed, start where pets get added.
         if packs.isEmpty { showPicker() }
@@ -100,7 +111,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for pet in pets where !packs.contains(where: { $0.name == pet.name }) {
             setEnabled(pet.name, false)
         }
-        picker.update(packs: packs, enabled: Set(pets.map(\.name)))
+        fillRandom()
+        picker.update(packs: packs, enabled: Set(fixedNames), random: Set(randomPicks))
     }
 
     private func showPicker() {
@@ -135,18 +147,126 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return Set(packs.map(\.name))
     }
 
+    /// Switches a pet on (it stays out) or off. A random pet switched on is kept: it stops being random and
+    /// another is drawn for its slot. Switching one on when every slot is taken frees a random one first.
     private func setEnabled(_ name: String, _ on: Bool) {
-        if on, !pets.contains(where: { $0.name == name }), pets.count >= PetLibrary.maxOut {
-            tellAboutCap()
-        } else if on, !pets.contains(where: { $0.name == name }), let pack = packs.first(where: { $0.name == name }) {
-            place(pack)
-        } else if !on, let index = pets.firstIndex(where: { $0.name == name }) {
-            house?.remove(pets[index])
-            pets.remove(at: index).close()
+        if on, let index = randomPicks.firstIndex(of: name) {
+            randomPicks.remove(at: index)
+        } else if on, !pets.contains(where: { $0.name == name }) {
+            if pets.count >= PetLibrary.maxOut, let spare = randomPicks.last { takeOut(spare) }
+            if pets.count >= PetLibrary.maxOut {
+                tellAboutCap()
+            } else if let pack = packs.first(where: { $0.name == name }) {
+                place(pack)
+            }
+        } else if !on, pets.contains(where: { $0.name == name }) {
+            takeOut(name)
         }
-        let names = pets.map(\.name)
-        UserDefaults.standard.set(names, forKey: Defaults.enabled)
-        picker.refresh(enabled: Set(names))
+        fillRandom()
+        saveOut()
+    }
+
+    /// The pets switched on, in the order they came out.
+    private var fixedNames: [String] { pets.map(\.name).filter { !randomPicks.contains($0) } }
+
+    private func saveOut() {
+        UserDefaults.standard.set(fixedNames, forKey: Defaults.enabled)
+        UserDefaults.standard.set(randomPicks, forKey: Defaults.randomPicks)
+        picker?.refresh(enabled: Set(fixedNames), random: Set(randomPicks))
+    }
+
+    /// Puts a pet away, switched on or random.
+    private func takeOut(_ name: String) {
+        if let index = randomPicks.firstIndex(of: name) {
+            randomPicks.remove(at: index)
+            remember(name)
+        }
+        swapQueue.removeAll { $0 == name }
+        guard let index = pets.firstIndex(where: { $0.name == name }) else { return }
+        house?.remove(pets[index])
+        pets.remove(at: index).close()
+    }
+
+    // MARK: Random pets
+
+    /// How many random pets there should be: the count asked for, in the slots left by pets switched on.
+    private var randomTarget: Int { max(0, min(picker.randomCount, PetLibrary.maxOut - fixedNames.count)) }
+
+    /// The pets a random slot can draw: the favourites when asked (every pet while none are starred), less
+    /// those out already and those just swapped out (unless that leaves nothing).
+    private func randomPool() -> [PetPack] {
+        let out = Set(pets.map(\.name))
+        var pool = packs.filter { !out.contains($0.name) }
+        if picker.randomFavoritesOnly {
+            let starred = pool.filter { picker.favorites.contains($0.name) }
+            if !starred.isEmpty || !picker.favorites.isEmpty { pool = starred }
+        }
+        let fresh = pool.filter { !recentlyOut.contains($0.name) }
+        return fresh.isEmpty ? pool : fresh
+    }
+
+    private func remember(_ name: String) {
+        recentlyOut.removeAll { $0 == name }
+        recentlyOut.append(name)
+        if recentlyOut.count > PetLibrary.maxOut * 2 { recentlyOut.removeFirst() }
+    }
+
+    /// Brings random pets out or puts them away until there are as many as asked for.
+    private func fillRandom() {
+        guard picker != nil else { return }
+        while randomPicks.count > randomTarget, let name = randomPicks.last { takeOut(name) }
+        while randomPicks.count < randomTarget, let pack = randomPool().randomElement() {
+            let before = pets.count
+            place(pack)
+            guard pets.count > before else { break }
+            randomPicks.append(pack.name)
+        }
+        saveOut()
+    }
+
+    /// Restores the last random picks, or draws new ones when they change at each launch; then keeps
+    /// an eye on the clock for hourly and daily shuffles.
+    private func startRandom() {
+        let saved = UserDefaults.standard.stringArray(forKey: Defaults.randomPicks) ?? []
+        if picker.shuffleInterval != .launch {
+            for name in saved where randomPicks.count < randomTarget && !pets.contains(where: { $0.name == name }) {
+                guard let pack = packs.first(where: { $0.name == name }) else { continue }
+                place(pack)
+                if pets.contains(where: { $0.name == name }) { randomPicks.append(name) }
+            }
+        } else {
+            recentlyOut = saved
+        }
+        fillRandom()
+        shuffleTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.shuffleIfDue() }
+        }
+    }
+
+    private func shuffleIfDue() {
+        guard let period = picker.shuffleInterval.seconds, !randomPicks.isEmpty, swapQueue.isEmpty else { return }
+        let last = UserDefaults.standard.object(forKey: Defaults.randomShuffled) as? Date ?? .distantPast
+        if Date().timeIntervalSince(last) >= period { shuffleRandom(staggered: true) }
+    }
+
+    /// Swaps every random pet for a new one: now, or one at a time a few minutes apart.
+    private func shuffleRandom(staggered: Bool) {
+        UserDefaults.standard.set(Date(), forKey: Defaults.randomShuffled)
+        swapQueue = randomPicks
+        if staggered { swapNext() } else { while !swapQueue.isEmpty { swapOne() } }
+    }
+
+    private func swapNext() {
+        guard !swapQueue.isEmpty else { return }
+        swapOne()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 180) { [weak self] in self?.swapNext() }
+    }
+
+    private func swapOne() {
+        let name = swapQueue.removeFirst()
+        guard randomPicks.contains(name) else { return }
+        takeOut(name)
+        fillRandom()
     }
 
     private var capAlertShowing = false
@@ -204,7 +324,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Cancel")
         NSApp.activate(ignoringOtherApps: true)
         guard alert.runModal() == .alertFirstButtonReturn, let domain = Bundle.main.bundleIdentifier else { return }
-        let enabled = pets.map(\.name)
+        let enabled = fixedNames
         UserDefaults.standard.removePersistentDomain(forName: domain)
         UserDefaults.standard.set(enabled, forKey: Defaults.enabled)
         relaunch(reason: "to reset its settings")
@@ -333,6 +453,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isHouseOpen: { [unowned self] in house != nil },
             resetToDefaults: { [unowned self] in resetToDefaults() },
             removePet: { [unowned self] in setEnabled($0, false) },
+            shuffleRandom: { [unowned self] in shuffleRandom(staggered: false) },
+            hasRandom: { [unowned self] in !randomPicks.isEmpty },
             isPaused: { [unowned self] in userPaused },
             wanders: { [unowned self] in wander },
             size: { [unowned self] in size },

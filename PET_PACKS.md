@@ -54,6 +54,7 @@ To share one, zip the folder (or use **Export as Zip…** in the Pets window). *
     "Sleep": {"start": ["SleepStart"], "loop": "SleepLoop", "end": ["SleepEnd"], "loopCount": [1, 2]}
   },
   "surprisePool": [{"clip": "Encount2"}, {"group": "Sleep"}],
+  "submenus": {"Emotes": ["Wave", "Cheer"]}, // optional: surprises the menus list under a submenu of this name
   "surprise": {"intervalSeconds": [60, 180], "loopCount": [2, 4], "minSeconds": 6},
   "locomotion": [{"clip": "Walk", "weight": 5, "maxSeconds": null}, {"clip": "Run", "weight": 2, "maxSeconds": 4}],
   "wander": {"chance": 0.35, "seconds": [2.5, 6], "minDistanceMetres": 1.5, "depthChance": 0.5},
@@ -74,4 +75,4 @@ What the app does with it:
 - **Groups** never cut off mid-way: interrupting one plays its end clips first.
 - Clip names are free-form. Only the names listed in this file matter.
 
-Optional fields can be left out: `displayName` (defaults to `name`), `paldeckNo`, `idleVariants`, `meshScale` (1), `lookBones`, `rootTravel`, `groundSpeed`, `loopCount`, `maxSeconds`, and the `input` reactions. The pipeline also writes a few informational fields (`motionFit`, `pelvisLiftScale`, `coordinateSystem`) that the app ignores.
+Optional fields can be left out: `displayName` (defaults to `name`), `paldeckNo`, `idleVariants`, `submenus`, `meshScale` (1), `lookBones`, `rootTravel`, `groundSpeed`, `loopCount`, `maxSeconds`, and the `input` reactions. The pipeline also writes a few informational fields (`motionFit`, `pelvisLiftScale`, `coordinateSystem`) that the app ignores.

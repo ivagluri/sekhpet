@@ -9,9 +9,9 @@ import SwiftUI
 
 /// One line in the animation list: an animation, or a grouped one (start, loop, end) as a whole.
 struct ViewerAnimation: Identifiable, Hashable {
-    enum Section: String { case moves = "Moves", actions = "Actions", reactions = "Reactions" }
+    /// "Moves", "Actions", a submenu's name (OSRS "Emotes") or "Reactions".
     let title: String
-    let section: Section
+    let section: String
     let entry: Catalog.PoolEntry
 
     var id: String { entry.name }
@@ -23,20 +23,23 @@ struct ViewerAnimation: Identifiable, Hashable {
     static func list(for catalog: Catalog) -> [ViewerAnimation] {
         var seen = Set<String>()
         var list: [ViewerAnimation] = []
-        func add(_ entry: Catalog.PoolEntry, _ section: Section) {
+        func add(_ entry: Catalog.PoolEntry, _ section: String) {
             guard seen.insert(entry.name).inserted else { return }
             list.append(ViewerAnimation(title: title(entry.name), section: section, entry: entry))
         }
-        add(.init(clip: catalog.idleClip, group: nil), .moves)
-        for clip in catalog.idleVariants { add(.init(clip: clip, group: nil), .moves) }
-        for gait in catalog.locomotion { add(.init(clip: gait.clip, group: nil), .moves) }
+        add(.init(clip: catalog.idleClip, group: nil), "Moves")
+        for clip in catalog.idleVariants { add(.init(clip: clip, group: nil), "Moves") }
+        for gait in catalog.locomotion { add(.init(clip: gait.clip, group: nil), "Moves") }
         let actions = catalog.surprisePool.sorted { title($0.name) < title($1.name) }
-        for entry in actions { add(entry, .actions) }
+        for entry in actions where catalog.submenu(for: entry) == nil { add(entry, "Actions") }
+        for name in catalog.submenus.keys.sorted() {
+            for entry in actions where catalog.submenu(for: entry) == name { add(entry, name) }
+        }
         let input = catalog.input
         var reactions = input.singleClick.map { Catalog.PoolEntry(clip: $0.clip, group: nil) }
         reactions += [input.doubleClick].compactMap { $0 }.map { Catalog.PoolEntry(clip: $0, group: nil) }
         reactions += [input.dragGroup, input.dropGroup].compactMap { $0 }.map { Catalog.PoolEntry(clip: nil, group: $0) }
-        for entry in reactions { add(entry, .reactions) }
+        for entry in reactions { add(entry, "Reactions") }
         return list
     }
 
@@ -594,7 +597,7 @@ private struct AnimationRow: View {
             Text(animation.title).font(.callout).foregroundStyle(Palette.text)
             Spacer(minLength: 0)
             if firstInSection {
-                Text(animation.section.rawValue.uppercased()).font(.system(size: 9, weight: .semibold)).tracking(1)
+                Text(animation.section.uppercased()).font(.system(size: 9, weight: .semibold)).tracking(1)
                     .foregroundStyle(Palette.dim)
             }
         }

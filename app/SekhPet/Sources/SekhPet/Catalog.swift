@@ -98,6 +98,8 @@ struct Catalog: Decodable {
     let idleVariants: [String]
     let surprise: Surprise
     let surprisePool: [PoolEntry]
+    /// Surprises shown together under a submenu of this name (OSRS emotes), to keep the rest easy to pick.
+    let submenus: [String: [String]]
     let locomotion: [WeightedClip]
     let wander: Wander
     let input: Input
@@ -123,13 +125,19 @@ struct Catalog: Decodable {
         idleVariants = try c.decodeIfPresent([String].self, forKey: .idleVariants) ?? []
         surprise = try c.decode(Surprise.self, forKey: .surprise)
         surprisePool = try c.decode([PoolEntry].self, forKey: .surprisePool)
+        submenus = try c.decodeIfPresent([String: [String]].self, forKey: .submenus) ?? [:]
         locomotion = try c.decode([WeightedClip].self, forKey: .locomotion)
         wander = try c.decode(Wander.self, forKey: .wander)
         input = try c.decode(Input.self, forKey: .input)
     }
 
     private enum CodingKeys: String, CodingKey {
-        case name, displayName, paldeckNo, meshScale, lookBones, model, skeletonNode, clips, groups, idleClip, idleVariants, surprise, surprisePool, locomotion, wander, input
+        case name, displayName, paldeckNo, meshScale, lookBones, model, skeletonNode, clips, groups, idleClip, idleVariants, surprise, surprisePool, submenus, locomotion, wander, input
+    }
+
+    /// The submenu a pool entry belongs in, if any.
+    func submenu(for entry: PoolEntry) -> String? {
+        submenus.first { $0.value.contains(entry.name) }?.key
     }
 
     /// The clips a pool entry plays (a group's members in order).

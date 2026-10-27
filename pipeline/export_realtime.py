@@ -541,6 +541,8 @@ catalog = {
     'idleVariants': CONFIG.get('idleVariants', []),  # played within the idle, not as surprises
     'surprise': {k: v for k, v in CONFIG['surprise'].items() if not k.startswith('_')},
     'surprisePool': pool,
+    'submenus': {name: [c for c in names if c in clips]  # surprises the app lists under a submenu (OSRS emotes)
+                 for name, names in CONFIG.get('submenus', {}).items()},
     'locomotion': [{'clip': name, 'weight': v['weight'], 'maxSeconds': v.get('maxSeconds')}
                    for name, v in CONFIG['locomotion'].items()],
     'wander': {k: v for k, v in CONFIG['wander'].items() if not k.startswith('_')},

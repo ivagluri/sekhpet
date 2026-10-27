@@ -72,6 +72,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         var isHouseOpen: () -> Bool
         var resetToDefaults: () -> Void
         var removePet: (String) -> Void
+        var shuffleRandom: () -> Void
+        var hasRandom: () -> Bool
         var isPaused: () -> Bool
         var wanders: () -> Bool
         var size: () -> PetSize
@@ -102,6 +104,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             menu.addItem(submenu("\(pet.displayName): \(pet.engine.currentName ?? "…")", petMenu(pet)))
         }
         menu.addItem(entry("Choose Pets…", ",") { [actions] in actions.choosePets() })
+        if actions.hasRandom() {
+            menu.addItem(entry("Shuffle Random Pets", "") { [actions] in actions.shuffleRandom() })
+        }
         let house = entry("Pet House", "") { [actions] in actions.toggleHouse() }
         house.state = actions.isHouseOpen() ? .on : .off
         menu.addItem(house)
@@ -299,8 +304,23 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         }
         menu.addItem(.separator())
         menu.addItem(label("Surprises"))
+        var nested: [String: NSMenu] = [:]
         for entry in catalog.surprisePool.sorted(by: { $0.name < $1.name }) {
-            add(entry, entry.group != nil ? "\(entry.name) (start → loop → end)" : entry.name)
+            let title = entry.group != nil ? "\(entry.name) (start → loop → end)" : entry.name
+            if let name = catalog.submenu(for: entry) {
+                let item = self.entry(title, "") { pick(entry) }
+                item.state = entry == selected ? .on : .off
+                let sub = nested[name] ?? NSMenu()  // a class: a defaulted subscript wouldn't store it
+                sub.addItem(item)
+                nested[name] = sub
+            } else {
+                add(entry, title)
+            }
+        }
+        for (name, sub) in nested.sorted(by: { $0.key < $1.key }) {
+            let item = submenu(name, sub)
+            if sub.items.contains(where: { $0.state == .on }) { item.state = .mixed }
+            menu.addItem(item)
         }
         menu.addItem(.separator())
         menu.addItem(label("Travel"))

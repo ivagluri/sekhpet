@@ -125,6 +125,8 @@ than they look:
 Optional extras:
 - `groups`: start, loop and end clips that play as one, like a take-off, a glide and a landing.
 - `idleVariants`: clips the idle drifts into now and then.
+- `submenus`: surprises the app's menus and Pet Viewer list together under a name (`{"Emotes": [...]}`), so the
+  other actions stay easy to pick.
 - `feet` and `lookBones`: bone names for measuring stride and for watching the cursor.
 - `staticScale`: clips SceneKit won't crossfade out of (PIPELINE.md problem 17).
 - `input.dragGroup` and `input.dropGroup`: what plays while the pet is dragged and when it's dropped.

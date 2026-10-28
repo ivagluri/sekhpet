@@ -1,5 +1,6 @@
 import AppKit
 import IOKit.ps
+import Metal
 import SceneKit
 
 /// Lists the available pet packs, places the chosen ones on the desktop, and owns
@@ -17,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         static let house = "petHouse"
         static let randomPicks = "randomPets"
         static let randomShuffled = "randomPetsShuffled"
+        static let gpuRelaunches = "gpuRelaunches"
     }
 
     private var packs: [PetPack] = []
@@ -62,7 +64,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // they were in. Start a new one whenever it's gone quiet with the screens awake.
         frameWatch = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, !self.screensAsleep, CACurrentMediaTime() - self.lastFrame > 2 else { return }
+                guard let self else { return }
+                self.probeGPU()
+                guard !self.screensAsleep, CACurrentMediaTime() - self.lastFrame > 2 else { return }
                 NSLog("SekhPet: no frame for %.1fs; restarting the frame loop", CACurrentMediaTime() - self.lastFrame)
                 self.startFrameLoop()
             }
@@ -89,6 +93,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for pet in pets { pet.frame(at: now) }
         house?.frame(at: now)
         viewer?.frame(at: now)
+    }
+
+    // MARK: GPU access
+
+    /// After a GPU lockup macOS can refuse this process's GPU work for good ("access revoked").
+    /// SceneKit keeps submitting frames, so the render watch sees nothing wrong, but nothing
+    /// draws and every frame logs errors. A tiny blit every few seconds shows when it's happened.
+    private let probeQueue = MTLCreateSystemDefaultDevice()?.makeCommandQueue()
+    private lazy var probeBuffer = probeQueue?.device.makeBuffer(length: 4, options: .storageModePrivate)
+    private var gpuLost = false
+
+    private func probeGPU() {
+        guard !gpuLost, let buffer = probeBuffer, let commands = probeQueue?.makeCommandBuffer(),
+              let blit = commands.makeBlitCommandEncoder() else { return }
+        blit.fill(buffer: buffer, range: 0..<4, value: 0)
+        blit.endEncoding()
+        commands.addCompletedHandler { @Sendable [weak self] done in
+            guard (done.error as? MTLCommandBufferError)?.code == .accessRevoked else { return }
+            Task { @MainActor in self?.gpuAccessLost() }
+        }
+        commands.commit()
+    }
+
+    /// Only a new process can draw again, so relaunch; but if that's happened a few times in
+    /// ten minutes, whatever broke the GPU is still at it: pause instead of flooding the log.
+    private func gpuAccessLost() {
+        guard !gpuLost else { return }
+        gpuLost = true
+        let now = Date().timeIntervalSince1970
+        let recent = (UserDefaults.standard.array(forKey: Defaults.gpuRelaunches) as? [Double] ?? [])
+            .filter { now - $0 < 600 }
+        if recent.count < 3 {
+            UserDefaults.standard.set(recent + [now], forKey: Defaults.gpuRelaunches)
+            relaunch(reason: "after losing GPU access")
+            return
+        }
+        NSLog("SekhPet: lost GPU access again after %d relaunches; pausing", recent.count)
+        userPaused = true
+        for pet in pets { pet.setPaused(true, .user) }
+        house?.setPaused(true)
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "SekhPet paused after repeated GPU errors"
+            alert.informativeText = "macOS stopped SekhPet drawing, usually because another app keeps locking up "
+                + "the GPU. Unpause from the menu to restart SekhPet and try again."
+            alert.runModal()
+        }
     }
 
     // MARK: Pet House
@@ -447,6 +498,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func menuActions() -> StatusMenu.Actions {
         StatusMenu.Actions(
             togglePaused: { [unowned self] in
+                // Paused for lost GPU access: only a new process can draw again.
+                if gpuLost { return relaunch(reason: "to retry the GPU") }
                 userPaused.toggle()
                 for pet in pets { pet.setPaused(userPaused, .user) }
                 house?.setPaused(userPaused)

@@ -72,6 +72,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         var isHouseOpen: () -> Bool
         var resetToDefaults: () -> Void
         var removePet: (String) -> Void
+        var rerollPet: (String) -> Void
+        var isRandom: (String) -> Bool
         var shuffleRandom: () -> Void
         var hasRandom: () -> Bool
         var isPaused: () -> Bool
@@ -186,6 +188,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.addItem(entry("Reset Position", "") { pet.resetPosition() })
         menu.addItem(.separator())
         menu.addItem(entry("Remove from Desktop", "") { [actions] in actions.removePet(pet.name) })
+        if actions.isRandom(pet.name) {
+            menu.addItem(entry("Reroll", "") { [actions] in actions.rerollPet(pet.name) })
+        }
         return menu
     }
 
@@ -201,6 +206,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.addItem(sizeMenu(pet))
         menu.addItem(.separator())
         menu.addItem(entry("Remove from Desktop", "") { [actions] in actions.removePet(pet.name) })
+        if actions.isRandom(pet.name) {
+            menu.addItem(entry("Reroll", "") { [actions] in actions.rerollPet(pet.name) })
+        }
         return menu
     }
 

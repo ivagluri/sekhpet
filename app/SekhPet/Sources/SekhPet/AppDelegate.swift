@@ -335,6 +335,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 180) { [weak self] in self?.swapNext() }
     }
 
+    /// Takes a pet off the desktop. A random one lowers the random count with it, so nothing replaces it.
+    private func removeFromDesktop(_ name: String) {
+        guard randomPicks.contains(name) else { return setEnabled(name, false) }
+        takeOut(name)
+        picker.randomCount = randomPicks.count
+    }
+
+    /// Swaps one random pet for another drawn now.
+    private func reroll(_ name: String) {
+        guard randomPicks.contains(name) else { return }
+        takeOut(name)
+        fillRandom()
+    }
+
     private func swapOne() {
         let name = swapQueue.removeFirst()
         guard randomPicks.contains(name) else { return }
@@ -536,7 +550,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             isHouseOpen: { [unowned self] in house != nil },
             resetToDefaults: { [unowned self] in resetToDefaults() },
-            removePet: { [unowned self] in setEnabled($0, false) },
+            removePet: { [unowned self] in removeFromDesktop($0) },
+            rerollPet: { [unowned self] in reroll($0) },
+            isRandom: { [unowned self] in randomPicks.contains($0) },
             shuffleRandom: { [unowned self] in shuffleRandom(staggered: false) },
             hasRandom: { [unowned self] in !randomPicks.isEmpty },
             isPaused: { [unowned self] in userPaused },

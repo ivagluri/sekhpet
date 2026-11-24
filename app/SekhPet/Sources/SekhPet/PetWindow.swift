@@ -91,6 +91,8 @@ final class PetSceneView: SCNView {
     }
 
     var isDragging: Bool { dragOffset != nil }
+    /// Past the click jitter: the pet is actually being carried.
+    var isCarried: Bool { dragging }
 }
 
 /// Makes the window click-through everywhere except over the model's pixels.
@@ -101,6 +103,11 @@ final class ClickThroughTracker {
     /// Replaced when the controller swaps in a fresh view.
     var view: PetSceneView
     private var timer: Timer?
+    /// The pointer moved onto the pet's pixels (true) or off them.
+    var onHover: ((Bool) -> Void)?
+    private var hovered = false {
+        didSet { if hovered != oldValue { onHover?(hovered) } }
+    }
 
     init(window: NSWindow, view: PetSceneView) {
         self.window = window
@@ -119,14 +126,19 @@ final class ClickThroughTracker {
     }
 
     private func update() {
-        guard window.isVisible else { return }
+        guard window.isVisible else {
+            hovered = false
+            return
+        }
         if view.isDragging {
             window.ignoresMouseEvents = false
+            hovered = false
             return
         }
         let mouse = NSEvent.mouseLocation
         guard window.frame.contains(mouse) else {
             window.ignoresMouseEvents = true
+            hovered = false
             return
         }
         let point = view.convert(window.convertPoint(fromScreen: mouse), from: nil)
@@ -135,6 +147,7 @@ final class ClickThroughTracker {
             .ignoreHiddenNodes: true,
         ])
         window.ignoresMouseEvents = hits.isEmpty
+        hovered = !hits.isEmpty
     }
 }
 

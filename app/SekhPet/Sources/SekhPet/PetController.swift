@@ -37,6 +37,10 @@ final class PetController {
     var onRenderStuck: (() -> Void)?
     /// Builds the right-click menu.
     var contextMenu: (() -> NSMenu?)?
+    /// Quick Ask: pips under the pet, a question field and an answer bubble.
+    let ask = AskController()
+    /// Set while Ask holds the pet in place.
+    private var askHolding = false
 
     var catalog: Catalog { stage.rig.catalog }
     var name: String { catalog.name }
@@ -64,12 +68,14 @@ final class PetController {
         panel.orderFrontRegardless()
         // Back on the window it was standing on, if that's still there.
         perch.snapToSurface(within: 6)
+        connectAsk()
     }
 
     /// Takes the pet off the desktop and releases its window and timers.
     func close() {
         saveOrigin()
         tracker.stop()
+        ask.close()
         if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
         stage.scene.isPaused = true
         sceneView.isPlaying = false
@@ -79,6 +85,11 @@ final class PetController {
     }
 
     func frame(at now: TimeInterval) {
+        ask.tick()
+        if ask.holdsPet != askHolding {
+            askHolding = ask.holdsPet
+            applyPinned()
+        }
         if housed {
             guard !engine.isPaused else { return }
             engine.tick()
@@ -94,7 +105,9 @@ final class PetController {
             return
         }
         // On a window of an app where Claude Code is working (a terminal), the pet works too.
-        engine.work = perch.surface.map { ClaudeWatch.shared.hosts.contains($0.owner) } == true ? catalog.workClip : nil
+        // So does a pet thinking over a question.
+        let claudeWorking = perch.surface.map { ClaudeWatch.shared.hosts.contains($0.owner) } == true
+        engine.work = claudeWorking || ask.isThinking ? catalog.workClip : nil
         engine.tick()
         stage.rig.motion.update(at: now)
         let moving = stage.rig.motion.isMoving && !stage.rig.motion.isPinned
@@ -139,6 +152,20 @@ final class PetController {
         setDrawing(!engine.isPaused)
         renderWatch.reset()
         perch.snapToSurface(within: 6)
+    }
+
+    // MARK: Quick Ask
+
+    private func connectAsk() {
+        ask.anchor = { [unowned self] in
+            guard !housed, !engine.isPaused, !sceneView.isCarried, panel.isVisible else { return nil }
+            let frame = panel.frame
+            let headTop = frame.minY + (catalog.clip(catalog.idleClip).bounds.max[1] - stage.bounds.minY) * pointsPerMetre
+            return AskController.Anchor(feet: NSPoint(x: frame.midX, y: frame.minY + floorInWindow),
+                                        headTop: min(headTop, frame.maxY), window: panel)
+        }
+        ask.onAnswered = { [unowned self] in engine.click() }
+        tracker.onHover = { [unowned self] in ask.petHover($0) }
     }
 
     // MARK: Standing on windows
@@ -272,7 +299,7 @@ final class PetController {
 
     private func applyPinned() {
         // In the Pet House the house moves the pet; its clips play in place.
-        let pinned = housed || isPinned || !wanderAllowed
+        let pinned = housed || isPinned || !wanderAllowed || askHolding
         guard pinned != stage.rig.motion.isPinned else { return }
         stage.rig.motion.isPinned = pinned
         if pinned { stage.rig.actor.setDepth(0, over: 1) }

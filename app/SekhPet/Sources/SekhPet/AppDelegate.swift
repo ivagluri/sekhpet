@@ -56,6 +56,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if packs.isEmpty { showPicker() }
         observeSystem()
         ClaudeWatch.shared.start()
+        // `--ask-demo "question" [expand]`: a check without a mouse; the first pet asks it.
+        if let flag = CommandLine.arguments.firstIndex(of: "--ask-demo"), flag + 1 < CommandLine.arguments.count {
+            let question = CommandLine.arguments[flag + 1]
+            let expand = CommandLine.arguments.dropFirst(flag + 2).first == "expand"
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                self?.pets.first?.ask.demo(question, expand: expand)
+            }
+        }
         if UserDefaults.standard.bool(forKey: Defaults.house) { setHouse(true) }
 
         startFrameLoop()

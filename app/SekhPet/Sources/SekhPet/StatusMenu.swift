@@ -143,6 +143,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         }
         menu.addItem(submenu("Size", sizes))
 
+        menu.addItem(submenu("Quick Ask", askMenu()))
+
         let power = NSMenu()
         for saving in PowerSaving.allCases {
             let item = entry(saving.title, "") { [actions] in actions.setPowerSaving(saving) }
@@ -186,6 +188,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         if let watching = watchMenu(pet) { menu.addItem(watching) }
         menu.addItem(sizeMenu(pet))
         menu.addItem(entry("Reset Position", "") { pet.resetPosition() })
+        if AskSettings.enabled { menu.addItem(entry("Ask…", "") { pet.ask.openField() }) }
         menu.addItem(.separator())
         menu.addItem(entry("Remove from Desktop", "") { [actions] in actions.removePet(pet.name) })
         if actions.isRandom(pet.name) {
@@ -199,6 +202,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     func contextMenu(for pet: PetController) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
+        if AskSettings.enabled {
+            menu.addItem(entry("Ask…", "") { pet.ask.openField() })
+            menu.addItem(.separator())
+        }
         menu.addItem(wanderItem(pet))
         menu.addItem(snapItem(pet))
         menu.addItem(doubleClickMenu(pet))
@@ -209,6 +216,43 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         if actions.isRandom(pet.name) {
             menu.addItem(entry("Reroll", "") { [actions] in actions.rerollPet(pet.name) })
         }
+        return menu
+    }
+
+    /// Quick Ask's shared settings: on or off for every pet, and the model `claude -p` answers with.
+    private func askMenu() -> NSMenu {
+        let menu = NSMenu()
+        let enabled = entry("Enabled", "") { [pets] in
+            AskSettings.enabled.toggle()
+            if !AskSettings.enabled { for pet in pets() { pet.ask.shutDown() } }
+        }
+        enabled.state = AskSettings.enabled ? .on : .off
+        menu.addItem(enabled)
+        menu.addItem(.separator())
+        menu.addItem(label("Answer With"))
+        let claude = entry("Claude Code", "") { AskSettings.source = .claude }
+        claude.state = AskSettings.source == .claude ? .on : .off
+        claude.indentationLevel = 1
+        menu.addItem(claude)
+        // From the address alone: building the server would read its key from the keychain.
+        let address = OpenAIBackend.normalized(AskSettings.serverURL)
+        let host = address?.host.map { " (\($0))" } ?? ""
+        let server = entry("Server\(host)", "") {
+            if OpenAIBackend.normalized(AskSettings.serverURL) == nil { AskServerSettings.show() }
+            AskSettings.source = .server
+        }
+        server.state = AskSettings.source == .server ? .on : .off
+        server.indentationLevel = 1
+        menu.addItem(server)
+        menu.addItem(.separator())
+        let models = NSMenu()
+        for (alias, title) in AskSettings.models {
+            let item = entry(title, "") { AskSettings.claudeModel = alias }
+            item.state = AskSettings.claudeModel == alias ? .on : .off
+            models.addItem(item)
+        }
+        menu.addItem(submenu("Claude Model", models))
+        menu.addItem(entry("Server Settings…", "") { AskServerSettings.show() })
         return menu
     }
 

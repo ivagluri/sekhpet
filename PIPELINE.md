@@ -101,6 +101,7 @@ Also skim the output for the size line (`game … -> shown …`), `rejected` str
 | 15 | Build fails in the probe: `index 0 out of range` | A curve-only animation (`AS_LeafMomonga_Walk_Curves`) has no bone channels | Automatic: dropped on import |
 | 16 | The pal is invisible: every test frame is empty | The mesh has shape keys; SceneKit draws nothing of a skinned mesh exported with blend shapes | Automatic: shape keys dropped before export (printed as a `WARNING`) |
 | 17 | No crossfade out of some clip: the pal snaps to the next one (Sekhmet after Sprint). In the check sheet it shows as the pal staying in that clip's pose (LeafMomonga flat after a drop) | SceneKit mishandles crossfading out of some clips with time-sampled bone scale; the offline renderer behind the check frames freezes instead of snapping. Not every such clip: 510 of 1308 have sampled scale, and most blend fine | Manual: list the clips in `staticScale` in overrides, which holds their scale at the first frame's |
+| 18 | Display name is `?` | The monster and English text tables can spell the same key with different capitalization (for example, `WindChimes_Ice` and `Windchimes_Ice`) | The indexer tries an exact match, then an unambiguous case-insensitive match. If it warns that a name is still missing or ambiguous, inspect the game tables and set `displayName` in the pal's override; re-run the pal. |
 
 ### No model folder
 

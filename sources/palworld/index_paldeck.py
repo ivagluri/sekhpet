@@ -15,6 +15,9 @@ TABLES = Path(__file__).resolve().parents[2] / 'work/tables'
 
 data = json.loads((TABLES / 'tables.json').read_text())
 names = next(v for k, v in data.items() if 'NameText' in k)[0]['Rows']
+names_folded = {}
+for name_key, value in names.items():
+    names_folded.setdefault(name_key.casefold(), []).append(value)
 params = next(v for k, v in data.items() if 'MonsterParameter' in k)[0]['Rows']
 paks = (TABLES / 'paklist.txt').read_text().splitlines()
 models = {m.group(1) for p in paks if (m := re.match(r'Pal/Content/Pal/Model/Character/Monster/[^/]+/SK_([^/.]+)\.uasset$', p))}
@@ -23,8 +26,12 @@ models = {m.group(1) for p in paks if (m := re.match(r'Pal/Content/Pal/Model/Cha
 def display(key, row):
     for text_id in (row.get('OverrideNameTextID'), f'PAL_NAME_{key}'):
         entry = names.get(text_id or '')
+        if not entry:
+            matches = names_folded.get((text_id or '').casefold(), [])
+            entry = matches[0] if len(matches) == 1 else None
         if entry:
             return entry['TextData']['LocalizedString']
+    print(f'WARNING: no unambiguous display name for {key}; check the name table or add an override', file=sys.stderr)
     return '?'
 
 

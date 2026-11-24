@@ -111,7 +111,6 @@ final class AskController {
         pipPanel.hasShadow = false
         bubblePanel.contentView = bubble
 
-        pips.onHover = { [unowned self] in pipsHovered = $0; hoverChanged() }
         pips.onAsk = { [unowned self] in pips.fieldOpen ? closeField() : openField() }
         pips.onReopen = { [unowned self] in reopen() }
         pips.field.onSubmit = { [unowned self] in ask($0, followUp: false) }
@@ -122,7 +121,6 @@ final class AskController {
             if pips.fieldOpen, pips.field.stringValue.isEmpty { closeField() }
         }
 
-        bubble.onHover = { [unowned self] in bubbleHovered = $0; scheduleFade() }
         bubble.onClose = { [unowned self] in dismiss() }
         bubble.onCopy = { [unowned self] in copyAnswer() }
         bubble.onExpand = { [unowned self] in setExpanded(!expanded) }
@@ -191,6 +189,25 @@ final class AskController {
     /// it only moves windows when something changed.
     func tick() {
         if pipPanel.shown || bubbleShown { follow() }
+        pollHover()
+    }
+
+    /// Whether the pointer is over the pips or the bubble, checked rather than tracked: a panel
+    /// that shrinks, moves or hides under the pointer gets no "mouse exited", which left the
+    /// pips up (and a bubble that never faded).
+    private func pollHover() {
+        guard pipPanel.isVisible || bubblePanel.isVisible || pipsHovered || bubbleHovered else { return }
+        let mouse = NSEvent.mouseLocation
+        let overPips = pipPanel.isVisible && pipPanel.frame.insetBy(dx: -2, dy: -2).contains(mouse)
+        if overPips != pipsHovered {
+            pipsHovered = overPips
+            hoverChanged()
+        }
+        let overBubble = bubblePanel.isVisible && bubblePanel.frame.contains(mouse)
+        if overBubble != bubbleHovered {
+            bubbleHovered = overBubble
+            scheduleFade()
+        }
     }
 
     private func follow() {

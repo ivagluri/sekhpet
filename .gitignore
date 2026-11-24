@@ -1,5 +1,7 @@
 # Generated per pal from your game files: never commit these.
 /work/
+/work/legacy-sekhpet-assets/
+/PALS.md
 # Your own characters for sources/rigged and sources/sprites (their art isn't ours to share).
 /characters/
 *-extract.zip
